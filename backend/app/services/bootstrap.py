@@ -23,52 +23,91 @@ PERMISSIONS = [
 ]
 
 ROLE_TEMPLATES = {
-    "platform_admin": PERMISSIONS,
-    "site_owner": PERMISSIONS,
-    "site_admin": [
-        "students.read",
-        "students.write",
-        "classrooms.read",
-        "classrooms.write",
-        "attendance.write",
-        "incidents.write",
-        "communication.write",
-        "documents.read",
-        "documents.write",
-        "settings.customize",
-        "users.manage",
-        "audit.read",
-    ],
-    "guide": [
-        "students.read",
-        "classrooms.read",
-        "attendance.write",
-        "incidents.write",
-        "communication.write",
-        "documents.read",
-    ],
-    "assistant": [
-        "students.read",
-        "classrooms.read",
-        "attendance.write",
-        "incidents.write",
-    ],
+    "platform_admin": {
+        "label": "Platform Admin",
+        "permissions": PERMISSIONS,
+        "systemRole": True,
+    },
+    "site_owner": {
+        "label": "Site Owner",
+        "permissions": PERMISSIONS,
+        "systemRole": True,
+    },
+    "site_admin": {
+        "label": "Site Admin",
+        "permissions": [
+            "students.read",
+            "students.write",
+            "classrooms.read",
+            "classrooms.write",
+            "attendance.write",
+            "incidents.write",
+            "communication.write",
+            "documents.read",
+            "documents.write",
+            "settings.customize",
+            "users.manage",
+            "audit.read",
+        ],
+        "systemRole": True,
+    },
+    "guide": {
+        "label": "Guide",
+        "permissions": [
+            "students.read",
+            "classrooms.read",
+            "attendance.write",
+            "incidents.write",
+            "communication.write",
+            "documents.read",
+        ],
+        "systemRole": True,
+    },
+    "assistant": {
+        "label": "Assistant",
+        "permissions": [
+            "students.read",
+            "classrooms.read",
+            "attendance.write",
+            "incidents.write",
+        ],
+        "systemRole": True,
+    },
 }
 
 CLASSROOMS = ["Nido", "Toddler", "Primary", "Elementary", "Aftercare"]
-INCIDENT_TYPES = ["Fall", "Bite", "Scratch", "Illness", "Behavior", "Medication", "Other"]
-DOCUMENT_TYPES = [
-    "Enrollment Form",
-    "Immunization Record",
-    "Medication Authorization",
-    "Emergency Contact Form",
-    "Handbook Acknowledgement",
-    "Other",
-]
+CUSTOM_LISTS = {
+    "incident_type": ["Fall", "Bite", "Scratch", "Illness", "Behavior", "Medication", "Other"],
+    "document_type": [
+        "Enrollment Form",
+        "Immunization Record",
+        "Medication Authorization",
+        "Emergency Contact Form",
+        "Handbook Acknowledgement",
+        "Other",
+    ],
+    "attendance_status": ["Present", "Absent", "Late", "Checked Out"],
+    "student_status": ["Active", "Inactive", "Future Enrollment", "Withdrawn", "Graduated"],
+}
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _empty_summary() -> dict[str, dict[str, int]]:
+    return {
+        "sites": {"inserted": 0, "existing": 0},
+        "classrooms": {"inserted": 0, "existing": 0},
+        "roles": {"inserted": 0, "existing": 0},
+        "custom_lists": {"inserted": 0, "existing": 0},
+        "users": {"inserted": 0, "existing": 0},
+    }
+
+
+def _record_result(summary: dict[str, dict[str, int]], collection: str, upserted_id: Any) -> None:
+    key = "inserted" if upserted_id is not None else "existing"
+    summary[collection][key] += 1
 
 
 async def get_user_context(db: AsyncIOMotorDatabase, firebase_uid: str) -> dict[str, Any] | None:
@@ -80,16 +119,17 @@ async def get_user_context(db: AsyncIOMotorDatabase, firebase_uid: str) -> dict[
     return await build_context(db, user)
 
 
-async def bootstrap_site_for_admin(
+async def seed_two_rivers(
     db: AsyncIOMotorDatabase,
     *,
-    email: str,
-    firebase_uid: str,
-) -> dict[str, Any]:
+    admin_email: str | None = None,
+    admin_firebase_uid: str | None = None,
+) -> dict[str, dict[str, int]]:
     now = _now()
     site_id = settings.default_site_id
+    summary = _empty_summary()
 
-    await db.sites.update_one(
+    result = await db.sites.update_one(
         {"siteId": site_id},
         {
             "$setOnInsert": {
@@ -103,25 +143,10 @@ async def bootstrap_site_for_admin(
         },
         upsert=True,
     )
-
-    for role_id, permissions in ROLE_TEMPLATES.items():
-        await db.roles.update_one(
-            {"siteId": site_id, "roleId": role_id},
-            {
-                "$setOnInsert": {
-                    "siteId": site_id,
-                    "roleId": role_id,
-                    "name": role_id.replace("_", " ").title(),
-                    "permissions": permissions,
-                    "createdAt": now,
-                },
-                "$set": {"updatedAt": now},
-            },
-            upsert=True,
-        )
+    _record_result(summary, "sites", result.upserted_id)
 
     for index, classroom in enumerate(CLASSROOMS):
-        await db.classrooms.update_one(
+        result = await db.classrooms.update_one(
             {"siteId": site_id, "name": classroom},
             {
                 "$setOnInsert": {
@@ -135,64 +160,115 @@ async def bootstrap_site_for_admin(
             },
             upsert=True,
         )
+        _record_result(summary, "classrooms", result.upserted_id)
 
-    await upsert_custom_list(db, "incident_types", INCIDENT_TYPES, now)
-    await upsert_custom_list(db, "document_types", DOCUMENT_TYPES, now)
-
-    await db.users.update_one(
-        {"firebaseUid": firebase_uid},
-        {
-            "$setOnInsert": {
-                "siteId": site_id,
-                "firebaseUid": firebase_uid,
-                "email": email,
-                "status": "active",
-                "roles": ["site_owner", "platform_admin"],
-                "createdAt": now,
+    for role_key, template in ROLE_TEMPLATES.items():
+        result = await db.roles.update_one(
+            {"siteId": site_id, "roleKey": role_key},
+            {
+                "$setOnInsert": {
+                    "siteId": site_id,
+                    "roleKey": role_key,
+                    "label": template["label"],
+                    "permissions": template["permissions"],
+                    "systemRole": template["systemRole"],
+                    "createdAt": now,
+                },
+                "$set": {"updatedAt": now},
             },
-            "$set": {
-                "email": email,
-                "siteId": site_id,
-                "updatedAt": now,
-            },
-        },
-        upsert=True,
-    )
+            upsert=True,
+        )
+        _record_result(summary, "roles", result.upserted_id)
 
+    for list_key, values in CUSTOM_LISTS.items():
+        for index, value in enumerate(values):
+            result = await db.custom_lists.update_one(
+                {"siteId": site_id, "listKey": list_key, "value": value},
+                {
+                    "$setOnInsert": {
+                        "siteId": site_id,
+                        "listKey": list_key,
+                        "value": value,
+                        "label": value,
+                        "active": True,
+                        "sortOrder": index,
+                        "systemDefault": True,
+                        "createdAt": now,
+                    },
+                    "$set": {"updatedAt": now},
+                },
+                upsert=True,
+            )
+            _record_result(summary, "custom_lists", result.upserted_id)
+
+    if admin_email and admin_firebase_uid:
+        result = await upsert_bootstrap_admin_user(
+            db,
+            email=admin_email,
+            firebase_uid=admin_firebase_uid,
+            timestamp=now,
+        )
+        _record_result(summary, "users", result.upserted_id)
+
+    return summary
+
+
+async def bootstrap_site_for_admin(
+    db: AsyncIOMotorDatabase,
+    *,
+    email: str,
+    firebase_uid: str,
+) -> dict[str, Any]:
+    await seed_two_rivers(db, admin_email=email, admin_firebase_uid=firebase_uid)
     user = await db.users.find_one({"firebaseUid": firebase_uid})
     return await build_context(db, user)
 
 
-async def upsert_custom_list(
-    db: AsyncIOMotorDatabase,
-    list_type: str,
-    values: list[str],
-    timestamp: datetime,
-) -> None:
-    await db.custom_lists.update_one(
-        {"siteId": settings.default_site_id, "listType": list_type},
+async def upsert_bootstrap_admin_user(db: AsyncIOMotorDatabase, *, email: str, firebase_uid: str, timestamp: datetime):
+    site_id = settings.default_site_id
+
+    return await db.users.update_one(
+        {"firebaseUid": firebase_uid},
         {
             "$setOnInsert": {
-                "siteId": settings.default_site_id,
-                "listType": list_type,
-                "values": values,
+                "firebaseUid": firebase_uid,
+                "status": "active",
                 "createdAt": timestamp,
             },
-            "$set": {"updatedAt": timestamp},
+            "$set": {
+                "email": email,
+                "siteId": site_id,
+                "roles": ["site_owner", "platform_admin"],
+                "memberships": [
+                    {
+                        "siteId": site_id,
+                        "roleKey": "site_owner",
+                        "status": "active",
+                    },
+                    {
+                        "siteId": "*",
+                        "roleKey": "platform_admin",
+                        "status": "active",
+                    },
+                ],
+                "updatedAt": timestamp,
+            },
         },
         upsert=True,
     )
 
 
 async def build_context(db: AsyncIOMotorDatabase, user: dict[str, Any]) -> dict[str, Any]:
-    site = await db.sites.find_one({"siteId": user["siteId"]})
-    classroom_count = await db.classrooms.count_documents({"siteId": user["siteId"], "status": "active"})
+    site_id = user["siteId"]
+    site = await db.sites.find_one({"siteId": site_id})
+    classroom_count = await db.classrooms.count_documents({"siteId": site_id, "status": "active"})
 
     return {
         "user": {
             "email": user["email"],
             "firebaseUid": user["firebaseUid"],
             "roles": user.get("roles", []),
+            "memberships": user.get("memberships", []),
         },
         "site": {
             "siteId": site["siteId"],

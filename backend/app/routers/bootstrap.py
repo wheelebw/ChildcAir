@@ -17,11 +17,15 @@ async def bootstrap_me(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> dict[str, Any]:
     existing_context = await get_user_context(db, firebase_user.uid)
+    is_bootstrap_admin = firebase_user.email.lower() in settings.bootstrap_admin_emails
 
     if existing_context:
+        if is_bootstrap_admin:
+            return await bootstrap_site_for_admin(db, email=firebase_user.email, firebase_uid=firebase_user.uid)
+
         return existing_context
 
-    if firebase_user.email.lower() not in settings.bootstrap_admin_emails:
+    if not is_bootstrap_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account has not been invited to this ChildcAir site yet.",

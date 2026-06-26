@@ -48,9 +48,19 @@ async def check_database_connection() -> bool:
 
 
 async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
+    await drop_legacy_index(db.roles, "siteId_1_roleId_1")
+    await drop_legacy_index(db.custom_lists, "siteId_1_listType_1")
+
     await db.sites.create_index([("siteId", ASCENDING)], unique=True)
     await db.users.create_index([("firebaseUid", ASCENDING)], unique=True)
     await db.users.create_index([("email", ASCENDING)], unique=True)
-    await db.roles.create_index([("siteId", ASCENDING), ("roleId", ASCENDING)], unique=True)
+    await db.roles.create_index([("siteId", ASCENDING), ("roleKey", ASCENDING)], unique=True)
     await db.classrooms.create_index([("siteId", ASCENDING), ("name", ASCENDING)], unique=True)
-    await db.custom_lists.create_index([("siteId", ASCENDING), ("listType", ASCENDING)], unique=True)
+    await db.custom_lists.create_index([("siteId", ASCENDING), ("listKey", ASCENDING), ("value", ASCENDING)], unique=True)
+
+
+async def drop_legacy_index(collection, index_name: str) -> None:
+    indexes = await collection.index_information()
+
+    if index_name in indexes:
+        await collection.drop_index(index_name)
