@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { BottomNav, type NavItem } from "./components/BottomNav";
+import { useAuth } from "./context/AuthContext";
 import { ClassroomsPage } from "./pages/Classrooms";
 import { CommunicationPage } from "./pages/Communication";
 import { HomePage } from "./pages/Home";
+import { LoginPage } from "./pages/Login";
 import { MorePage } from "./pages/More";
 import { StudentsPage } from "./pages/Students";
 
@@ -31,10 +33,29 @@ function renderPage(activePage: NavItem["id"]) {
 }
 
 export default function App() {
+  const { currentUser, loading, logout } = useAuth();
   const [activePage, setActivePage] = useState<NavItem["id"]>("home");
+
+  if (loading) {
+    return (
+      <main className="loading-screen">
+        <p>Loading...</p>
+      </main>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="app-shell">
+      <header className="app-header">
+        <span>ChildcAir</span>
+        <button className="text-button" type="button" onClick={logout}>
+          Logout
+        </button>
+      </header>
       <main className="app-main">{renderPage(activePage)}</main>
       <BottomNav items={navItems} activeId={activePage} onSelect={setActivePage} />
     </div>
