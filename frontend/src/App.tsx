@@ -33,7 +33,7 @@ function renderPage(activePage: NavItem["id"]) {
 }
 
 export default function App() {
-  const { currentUser, loading, logout } = useAuth();
+  const { appContextError, appContextLoading, currentUser, loading, logout } = useAuth();
   const [activePage, setActivePage] = useState<NavItem["id"]>("home");
 
   if (loading) {
@@ -46,6 +46,29 @@ export default function App() {
 
   if (!currentUser) {
     return <LoginPage />;
+  }
+
+  if (appContextLoading) {
+    return (
+      <main className="loading-screen">
+        <p>Loading your ChildcAir site...</p>
+      </main>
+    );
+  }
+
+  if (appContextError) {
+    return (
+      <main className="login-screen">
+        <section className="login-panel" aria-live="polite">
+          <p className="eyebrow">Access pending</p>
+          <h1>Not invited yet</h1>
+          <p className="page-copy">{appContextError}</p>
+          <button className="primary-button" type="button" onClick={logout}>
+            Logout
+          </button>
+        </section>
+      </main>
+    );
   }
 
   return (

@@ -1,21 +1,26 @@
 import { useAuth } from "../context/AuthContext";
 
 export function HomePage() {
-  const { currentUser } = useAuth();
-  const displayName = currentUser?.displayName || currentUser?.email || "there";
+  const { appContext, currentUser } = useAuth();
+  const email = appContext?.user.email || currentUser?.email || "";
+  const roles = appContext?.user.roles.join(" / ") || "No role assigned";
 
   return (
     <section className="page">
-      <p className="eyebrow">Authenticated</p>
-      <h1>Welcome {displayName}</h1>
+      <p className="eyebrow">Admin context</p>
+      <h1>Welcome {email}</h1>
       <dl className="user-details">
         <div>
-          <dt>Email:</dt>
-          <dd>{currentUser?.email}</dd>
+          <dt>Site:</dt>
+          <dd>{appContext?.site?.name || "No site assigned"}</dd>
         </div>
         <div>
-          <dt>Firebase UID:</dt>
-          <dd>{currentUser?.uid}</dd>
+          <dt>Role:</dt>
+          <dd>{roles}</dd>
+        </div>
+        <div>
+          <dt>Classrooms:</dt>
+          <dd>{appContext?.classrooms.count ?? 0}</dd>
         </div>
       </dl>
     </section>
