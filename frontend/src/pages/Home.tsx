@@ -4,6 +4,7 @@ export function HomePage() {
   const { appContext, currentUser } = useAuth();
   const email = appContext?.user.email || currentUser?.email || "";
   const roles = appContext?.user.roles.join(" / ") || "No role assigned";
+  const timezone = appContext?.site?.timezone || "America/Chicago";
 
   return (
     <section className="page">
@@ -21,6 +22,10 @@ export function HomePage() {
         <div>
           <dt>Classrooms:</dt>
           <dd>{appContext?.classrooms.count ?? 0}</dd>
+        </div>
+        <div>
+          <dt>Timezone:</dt>
+          <dd>{timezone}</dd>
         </div>
       </dl>
     </section>

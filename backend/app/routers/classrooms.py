@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, time
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -8,11 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.deps import FirebaseUser, get_current_firebase_user
 from app.services.auth_context import resolve_current_user_context
 from app.services.database import get_database
-from app.services.events import create_event_record, object_id, serialize_event
+from app.services.events import create_event_record, object_id, serialize_event, utc_iso
 
 router = APIRouter(tags=["classrooms"])
 
 AttendanceAction = Literal["check_in", "check_out"]
+DEFAULT_SITE_TIMEZONE = "America/Chicago"
 
 
 class AttendanceRequest(BaseModel):
@@ -55,10 +57,28 @@ def _serialize_student(student: dict[str, Any], attendance: dict[str, Any]) -> d
     }
 
 
-def _today_bounds() -> tuple[datetime, datetime]:
-    # TODO: use the site's timezone field for day boundaries.
-    today = datetime.now(UTC).date()
-    return datetime.combine(today, time.min, tzinfo=UTC), datetime.combine(today, time.max, tzinfo=UTC)
+async def _site_timezone(db: AsyncIOMotorDatabase, site_id: str) -> str:
+    site = await db.sites.find_one({"siteId": site_id}, {"timezone": 1})
+
+    if not site:
+        return DEFAULT_SITE_TIMEZONE
+
+    return site.get("timezone") or DEFAULT_SITE_TIMEZONE
+
+
+def _timezone(site_timezone: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(site_timezone)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo(DEFAULT_SITE_TIMEZONE)
+
+
+def _today_bounds(site_timezone: str) -> tuple[datetime, datetime]:
+    zone = _timezone(site_timezone)
+    today = datetime.now(zone).date()
+    start = datetime.combine(today, time.min, tzinfo=zone).astimezone(UTC)
+    end = datetime.combine(today, time.max, tzinfo=zone).astimezone(UTC)
+    return start, end
 
 
 async def _classroom_or_404(db: AsyncIOMotorDatabase, site_id: str, classroom_id: str) -> dict[str, Any]:
@@ -70,8 +90,10 @@ async def _classroom_or_404(db: AsyncIOMotorDatabase, site_id: str, classroom_id
     return classroom
 
 
-async def _attendance_by_student(db: AsyncIOMotorDatabase, site_id: str, student_ids: list[str]) -> dict[str, dict[str, Any]]:
-    start, end = _today_bounds()
+async def _attendance_by_student(
+    db: AsyncIOMotorDatabase, site_id: str, student_ids: list[str], site_timezone: str
+) -> dict[str, dict[str, Any]]:
+    start, end = _today_bounds(site_timezone)
     latest: dict[str, dict[str, Any]] = {}
     cursor = db.events.find(
         {
@@ -87,7 +109,7 @@ async def _attendance_by_student(db: AsyncIOMotorDatabase, site_id: str, student
             if student_id in student_ids and student_id not in latest:
                 latest[student_id] = {
                     "status": "checked_in" if event["eventType"] == "attendance.check_in" else "checked_out",
-                    "timestamp": event["timestamp"].isoformat(),
+                    "timestamp": utc_iso(event.get("timestamp")),
                     "eventId": str(event["_id"]),
                 }
 
@@ -119,13 +141,14 @@ async def list_classrooms(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[dict[str, Any]]:
     _, site_id = await _current_user_site(db, firebase_user)
+    site_timezone = await _site_timezone(db, site_id)
     classrooms = [classroom async for classroom in db.classrooms.find({"siteId": site_id, "status": "active"}).sort("sortOrder", 1)]
     response = []
 
     for classroom in classrooms:
         classroom_id = str(classroom["_id"])
         students = await _students_for_classroom(db, site_id, classroom_id)
-        attendance = await _attendance_by_student(db, site_id, [str(student["_id"]) for student in students])
+        attendance = await _attendance_by_student(db, site_id, [str(student["_id"]) for student in students], site_timezone)
         response.append(_serialize_classroom(classroom, _counts(attendance)))
 
     return response
@@ -138,10 +161,11 @@ async def get_classroom_attendance(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> dict[str, Any]:
     _, site_id = await _current_user_site(db, firebase_user)
+    site_timezone = await _site_timezone(db, site_id)
     classroom = await _classroom_or_404(db, site_id, classroom_id)
     students = await _students_for_classroom(db, site_id, classroom_id)
     student_ids = [str(student["_id"]) for student in students]
-    attendance = await _attendance_by_student(db, site_id, student_ids)
+    attendance = await _attendance_by_student(db, site_id, student_ids, site_timezone)
 
     return {
         "classroom": _serialize_classroom(classroom, _counts(attendance)),

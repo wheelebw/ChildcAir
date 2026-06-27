@@ -64,6 +64,7 @@ export function StudentsPage() {
   const [error, setError] = useState("");
 
   const classrooms = appContext?.classrooms.items ?? [];
+  const siteTimezone = appContext?.site?.timezone || "America/Chicago";
   const classroomNames = useMemo(
     () => Object.fromEntries(classrooms.map((classroom) => [classroom.id, classroom.name])),
     [classrooms]
@@ -195,6 +196,7 @@ export function StudentsPage() {
         events={selectedEvents}
         onBack={() => setMode("list")}
         onEdit={startEditStudent}
+        siteTimezone={siteTimezone}
         student={selectedStudent}
       />
     );
@@ -357,16 +359,18 @@ function StudentProfile({
   events,
   onBack,
   onEdit,
+  siteTimezone,
   student
 }: {
   classroomName: string;
   events: ChildcAirEvent[];
   onBack: () => void;
   onEdit: () => void;
+  siteTimezone: string;
   student: Student;
 }) {
   const guardian = student.guardians[0];
-  const groupedEvents = groupEventsByDay(events);
+  const groupedEvents = groupEventsByDay(events, siteTimezone);
   const [activeTab, setActiveTab] = useState<"profile" | "timeline">("profile");
 
   return (
@@ -451,7 +455,7 @@ function StudentProfile({
             <div className="timeline-list">
               {group.events.map((event) => (
                 <article className="timeline-item" key={event.id}>
-                  <time>{formatEventTime(event.timestamp)}</time>
+                  <time>{formatEventTime(event.timestamp, siteTimezone)}</time>
                   <div>
                     <strong>{eventTypeLabel(event.eventType)}</strong>
                     {event.notes ? <p>{event.notes}</p> : null}
@@ -521,34 +525,55 @@ function eventTypeLabel(eventType: string) {
   return labels[eventType] ?? eventType;
 }
 
-function groupEventsByDay(events: ChildcAirEvent[]) {
+function groupEventsByDay(events: ChildcAirEvent[], siteTimezone: string) {
   const groups = new Map<string, ChildcAirEvent[]>();
 
   events.forEach((event) => {
-    const label = formatEventDay(event.timestamp);
+    const label = formatEventDay(event.timestamp, siteTimezone);
     groups.set(label, [...(groups.get(label) ?? []), event]);
   });
 
   return Array.from(groups.entries()).map(([label, groupEvents]) => ({ label, events: groupEvents }));
 }
 
-function formatEventDay(timestamp: string) {
+function formatEventDay(timestamp: string, siteTimezone: string) {
   const date = new Date(timestamp);
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
 
-  if (date.toDateString() === today.toDateString()) {
+  if (dateKey(date, siteTimezone) === dateKey(today, siteTimezone)) {
     return "Today";
   }
 
-  if (date.toDateString() === yesterday.toDateString()) {
+  if (dateKey(date, siteTimezone) === dateKey(yesterday, siteTimezone)) {
     return "Yesterday";
   }
 
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: siteTimezone
+  }).format(date);
 }
 
-function formatEventTime(timestamp: string) {
-  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+function dateKey(date: Date, siteTimezone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: siteTimezone,
+    year: "numeric"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function formatEventTime(timestamp: string, siteTimezone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: siteTimezone
+  }).format(new Date(timestamp));
 }

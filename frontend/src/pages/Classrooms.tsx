@@ -11,13 +11,14 @@ import {
 } from "../services/api";
 
 export function ClassroomsPage() {
-  const { currentUser } = useAuth();
+  const { appContext, currentUser } = useAuth();
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [attendance, setAttendance] = useState<ClassroomAttendance | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const siteTimezone = appContext?.site?.timezone || "America/Chicago";
 
   useEffect(() => {
     void loadClassrooms();
@@ -149,7 +150,7 @@ export function ClassroomsPage() {
                 />
                 <span>
                   <strong>{studentName(student)}</strong>
-                  <small>{statusText(student.attendance.status, student.attendance.timestamp)}</small>
+                  <small>{statusText(student.attendance.status, student.attendance.timestamp, siteTimezone)}</small>
                 </span>
               </label>
               <button
@@ -205,22 +206,26 @@ function studentName(student: { firstName: string; lastName: string; preferredNa
   return [student.preferredName || student.firstName, student.lastName].filter(Boolean).join(" ");
 }
 
-function statusText(status: AttendanceStatus, timestamp: string) {
+function statusText(status: AttendanceStatus, timestamp: string, siteTimezone: string) {
   if (status === "checked_in") {
-    return `Status: Checked in at ${formatTime(timestamp)}`;
+    return `Status: Checked in at ${formatTime(timestamp, siteTimezone)}`;
   }
 
   if (status === "checked_out") {
-    return `Status: Checked out at ${formatTime(timestamp)}`;
+    return `Status: Checked out at ${formatTime(timestamp, siteTimezone)}`;
   }
 
   return "Status: Not checked in";
 }
 
-function formatTime(timestamp: string) {
+function formatTime(timestamp: string, siteTimezone: string) {
   if (!timestamp) {
     return "";
   }
 
-  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: siteTimezone
+  }).format(new Date(timestamp));
 }

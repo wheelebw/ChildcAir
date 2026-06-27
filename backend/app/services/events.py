@@ -14,6 +14,23 @@ def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def normalize_to_utc(value: datetime | None) -> datetime:
+    if value is None:
+        return now_utc()
+
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+
+    return value.astimezone(UTC)
+
+
+def utc_iso(value: datetime | None) -> str:
+    if value is None:
+        return ""
+
+    return normalize_to_utc(value).isoformat()
+
+
 def object_id(entity_id: str, detail: str) -> ObjectId:
     if not ObjectId.is_valid(entity_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
@@ -28,12 +45,12 @@ def serialize_event(event: dict[str, Any]) -> dict[str, Any]:
         "eventType": event["eventType"],
         "studentIds": event.get("studentIds", []),
         "classroomId": event.get("classroomId", ""),
-        "timestamp": event["timestamp"].isoformat() if event.get("timestamp") else "",
+        "timestamp": utc_iso(event.get("timestamp")),
         "createdBy": event.get("createdBy", ""),
         "notes": event.get("notes", ""),
         "metadata": event.get("metadata", {}),
-        "createdAt": event["createdAt"].isoformat() if event.get("createdAt") else "",
-        "updatedAt": event["updatedAt"].isoformat() if event.get("updatedAt") else "",
+        "createdAt": utc_iso(event.get("createdAt")),
+        "updatedAt": utc_iso(event.get("updatedAt")),
     }
 
 
@@ -109,7 +126,7 @@ async def create_event_record(
         "eventType": event_type,
         "studentIds": unique_student_ids,
         "classroomId": classroom_id,
-        "timestamp": timestamp or current_time,
+        "timestamp": normalize_to_utc(timestamp),
         "createdBy": str(actor_user["_id"]),
         "notes": notes,
         "metadata": metadata or {},
