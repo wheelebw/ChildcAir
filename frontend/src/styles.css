@@ -229,7 +229,9 @@ h1 {
   margin: 0;
 }
 
-.student-list {
+.student-list,
+.incident-list,
+.tool-list {
   display: grid;
   gap: 10px;
 }
@@ -311,7 +313,9 @@ h1 {
   font-weight: 700;
 }
 
-.student-card {
+.student-card,
+.incident-card,
+.tool-card {
   width: 100%;
   min-height: 72px;
   display: flex;
@@ -327,22 +331,46 @@ h1 {
   text-align: left;
 }
 
-.student-card span:first-child {
+.incident-card,
+.tool-card {
+  text-decoration: none;
+}
+
+.student-card span:first-child,
+.incident-card span:first-child,
+.tool-card span:first-child {
   min-width: 0;
   display: grid;
   gap: 4px;
 }
 
 .student-card strong,
-.student-card small {
+.student-card small,
+.incident-card strong,
+.incident-card small,
+.tool-card strong,
+.tool-card small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.student-card small {
+.student-card small,
+.incident-card small,
+.tool-card small {
   color: #64748b;
   font-weight: 700;
+}
+
+.incident-meta {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: capitalize;
 }
 
 .status-pill {
@@ -371,9 +399,14 @@ h1 {
   gap: 10px;
 }
 
+.checkbox-field input {
+  width: 24px;
+  min-height: 24px;
+}
+
 .profile-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   padding: 4px;
   border: 1px solid #dbe3ec;

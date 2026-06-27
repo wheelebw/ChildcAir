@@ -49,6 +49,7 @@ def serialize_event(event: dict[str, Any]) -> dict[str, Any]:
         "createdBy": event.get("createdBy", ""),
         "notes": event.get("notes", ""),
         "metadata": event.get("metadata", {}),
+        "relatedEntity": event.get("relatedEntity"),
         "createdAt": utc_iso(event.get("createdAt")),
         "updatedAt": utc_iso(event.get("updatedAt")),
     }
@@ -111,6 +112,7 @@ async def create_event_record(
     timestamp: datetime | None = None,
     notes: str = "",
     metadata: dict[str, Any] | None = None,
+    related_entity: dict[str, str] | None = None,
     audit_action: str = "event.created",
 ) -> dict[str, Any]:
     if event_type not in EVENT_TYPES:
@@ -130,6 +132,7 @@ async def create_event_record(
         "createdBy": str(actor_user["_id"]),
         "notes": notes,
         "metadata": metadata or {},
+        "relatedEntity": related_entity,
         "createdAt": current_time,
         "updatedAt": current_time,
     }

@@ -74,6 +74,7 @@ export type ChildcAirEvent = {
   createdBy: string;
   notes: string;
   metadata: Record<string, unknown>;
+  relatedEntity?: { type: string; id: string } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -139,6 +140,51 @@ export type AttendancePayload = {
   classroomId: string;
   timestamp?: string;
   notes?: string;
+};
+
+export type IncidentSeverity = "minor" | "moderate" | "major";
+export type IncidentStatus = "open" | "resolved" | "closed";
+export type ParentNotificationMethod = "none" | "email" | "sms" | "phone" | "in_person" | "app" | "other";
+
+export type Incident = {
+  id: string;
+  siteId: string;
+  studentId: string;
+  studentName: string;
+  classroomId: string;
+  classroomName: string;
+  incidentType: string;
+  incidentTypeLabel: string;
+  severity: IncidentSeverity;
+  location: string;
+  locationLabel: string;
+  otherLocation: string;
+  occurredAt: string;
+  description: string;
+  actionTaken: string;
+  staffWitnesses: string[];
+  parentNotified: boolean;
+  parentNotificationMethod: ParentNotificationMethod;
+  status: IncidentStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IncidentPayload = {
+  studentId: string;
+  classroomId: string;
+  incidentType: string;
+  severity: IncidentSeverity;
+  location: string;
+  otherLocation: string;
+  occurredAt: string;
+  description: string;
+  actionTaken: string;
+  staffWitnesses: string[];
+  parentNotified: boolean;
+  parentNotificationMethod: ParentNotificationMethod;
+  status: IncidentStatus;
 };
 
 export class ApiError extends Error {
@@ -268,4 +314,30 @@ export function checkOutStudents(idToken: string, payload: AttendancePayload) {
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export function listIncidents(idToken: string) {
+  return apiRequest<Incident[]>("/incidents", idToken);
+}
+
+export function createIncident(idToken: string, payload: IncidentPayload) {
+  return apiRequest<Incident>("/incidents", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getIncident(idToken: string, incidentId: string) {
+  return apiRequest<Incident>(`/incidents/${incidentId}`, idToken);
+}
+
+export function updateIncident(idToken: string, incidentId: string, payload: IncidentPayload) {
+  return apiRequest<Incident>(`/incidents/${incidentId}`, idToken, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listStudentIncidents(idToken: string, studentId: string) {
+  return apiRequest<Incident[]>(`/students/${studentId}/incidents`, idToken);
 }

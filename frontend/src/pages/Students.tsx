@@ -4,10 +4,12 @@ import {
   createStudent,
   getStudent,
   listStudentEvents,
+  listStudentIncidents,
   listStudents,
   updateStudent,
   type ChildcAirEvent,
   type Guardian,
+  type Incident,
   type Student,
   type StudentPayload
 } from "../services/api";
@@ -57,6 +59,7 @@ export function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<ChildcAirEvent[]>([]);
+  const [selectedIncidents, setSelectedIncidents] = useState<Incident[]>([]);
   const [mode, setMode] = useState<ViewMode>("list");
   const [form, setForm] = useState<StudentFormState>(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -106,9 +109,10 @@ export function StudentsPage() {
     try {
       const token = await getToken();
       const student = await getStudent(token, studentId);
-      const events = await listStudentEvents(token, studentId);
+      const [events, incidents] = await Promise.all([listStudentEvents(token, studentId), listStudentIncidents(token, studentId)]);
       setSelectedStudent(student);
       setSelectedEvents(events);
+      setSelectedIncidents(incidents);
       setMode("detail");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load student.");
@@ -117,8 +121,9 @@ export function StudentsPage() {
 
   function startNewStudent() {
     setForm(emptyForm);
-    setSelectedStudent(null);
-    setMode("new");
+      setSelectedStudent(null);
+      setSelectedIncidents([]);
+      setMode("new");
     setError("");
   }
 
@@ -160,7 +165,14 @@ export function StudentsPage() {
           : await createStudent(token, payload);
 
       setSelectedStudent(savedStudent);
-      setSelectedEvents(mode === "edit" ? await listStudentEvents(token, savedStudent.id) : []);
+      if (mode === "edit") {
+        const [events, incidents] = await Promise.all([listStudentEvents(token, savedStudent.id), listStudentIncidents(token, savedStudent.id)]);
+        setSelectedEvents(events);
+        setSelectedIncidents(incidents);
+      } else {
+        setSelectedEvents([]);
+        setSelectedIncidents([]);
+      }
       setMode("detail");
       setStudents(await listStudents(token));
     } catch (saveError) {
@@ -194,6 +206,7 @@ export function StudentsPage() {
       <StudentProfile
         classroomName={classroomNames[selectedStudent.defaultClassroomId] ?? ""}
         events={selectedEvents}
+        incidents={selectedIncidents}
         onBack={() => setMode("list")}
         onEdit={startEditStudent}
         siteTimezone={siteTimezone}
@@ -357,6 +370,7 @@ function StudentForm({
 function StudentProfile({
   classroomName,
   events,
+  incidents,
   onBack,
   onEdit,
   siteTimezone,
@@ -364,6 +378,7 @@ function StudentProfile({
 }: {
   classroomName: string;
   events: ChildcAirEvent[];
+  incidents: Incident[];
   onBack: () => void;
   onEdit: () => void;
   siteTimezone: string;
@@ -371,7 +386,7 @@ function StudentProfile({
 }) {
   const guardian = student.guardians[0];
   const groupedEvents = groupEventsByDay(events, siteTimezone);
-  const [activeTab, setActiveTab] = useState<"profile" | "timeline">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "timeline" | "incidents">("profile");
 
   return (
     <section className="page">
@@ -401,6 +416,13 @@ function StudentProfile({
           onClick={() => setActiveTab("timeline")}
         >
           Timeline
+        </button>
+        <button
+          className={`profile-tab${activeTab === "incidents" ? " profile-tab--active" : ""}`}
+          type="button"
+          onClick={() => setActiveTab("incidents")}
+        >
+          Incidents
         </button>
       </div>
       {activeTab === "profile" ? (
@@ -465,6 +487,28 @@ function StudentProfile({
             </div>
           </div>
         ))}
+      </section>
+      ) : null}
+      {activeTab === "incidents" ? (
+      <section className="timeline-section" aria-labelledby="incidents-heading">
+        <h2 id="incidents-heading">Incidents</h2>
+        {incidents.length === 0 ? <p className="page-copy">No incidents recorded.</p> : null}
+        <div className="incident-list">
+          {incidents.map((incident) => (
+            <article className="incident-card" key={incident.id}>
+              <span>
+                <strong>{incident.incidentTypeLabel}</strong>
+                <small>
+                  {incident.severity} / {incident.locationLabel === "Other" && incident.otherLocation ? incident.otherLocation : incident.locationLabel}
+                </small>
+                <small>{formatEventDateTime(incident.occurredAt, siteTimezone)}</small>
+              </span>
+              <span className="incident-meta">
+                <span className="status-pill">{incident.status}</span>
+              </span>
+            </article>
+          ))}
+        </div>
       </section>
       ) : null}
     </section>
@@ -574,6 +618,14 @@ function formatEventTime(timestamp: string, siteTimezone: string) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
     minute: "2-digit",
+    timeZone: siteTimezone
+  }).format(new Date(timestamp));
+}
+
+function formatEventDateTime(timestamp: string, siteTimezone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
     timeZone: siteTimezone
   }).format(new Date(timestamp));
 }
