@@ -57,6 +57,8 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.roles.create_index([("siteId", ASCENDING), ("roleKey", ASCENDING)], unique=True)
     await db.classrooms.create_index([("siteId", ASCENDING), ("name", ASCENDING)], unique=True)
     await db.custom_lists.create_index([("siteId", ASCENDING), ("listKey", ASCENDING), ("value", ASCENDING)], unique=True)
+    await db.students.create_index([("siteId", ASCENDING), ("lastName", ASCENDING), ("firstName", ASCENDING)])
+    await db.audit_logs.create_index([("siteId", ASCENDING), ("timestamp", ASCENDING)])
 
 
 async def drop_legacy_index(collection, index_name: str) -> None:

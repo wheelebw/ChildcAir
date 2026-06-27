@@ -14,7 +14,54 @@ export type AppContext = {
   } | null;
   classrooms: {
     count: number;
+    items: ClassroomSummary[];
   };
+};
+
+export type ClassroomSummary = {
+  id: string;
+  name: string;
+};
+
+export type Guardian = {
+  name: string;
+  relationship: string;
+  phone: string;
+  email: string;
+  preferredMethod: "email" | "sms" | "phone";
+  emailOptIn: boolean;
+  smsOptIn: boolean;
+  primary: boolean;
+};
+
+export type Student = {
+  id: string;
+  siteId: string;
+  firstName: string;
+  lastName: string;
+  preferredName: string;
+  birthdate: string;
+  status: "active" | "inactive" | "future_enrollment" | "withdrawn" | "graduated";
+  defaultClassroomId: string;
+  allergies: string[];
+  medicalNotes: string;
+  guardians: Guardian[];
+  authorizedPickup: Record<string, unknown>[];
+  custom: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StudentPayload = {
+  firstName: string;
+  lastName: string;
+  preferredName: string;
+  birthdate: string | null;
+  status: Student["status"];
+  defaultClassroomId: string;
+  allergies: string[];
+  medicalNotes: string;
+  guardians: Guardian[];
 };
 
 export class ApiError extends Error {
@@ -59,4 +106,52 @@ export async function bootstrapMe(idToken: string) {
   }
 
   return response.json() as Promise<AppContext>;
+}
+
+async function apiRequest<T>(path: string, idToken: string, init: RequestInit = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+      ...init.headers
+    }
+  });
+
+  if (!response.ok) {
+    let message = "Request failed.";
+
+    try {
+      const body = (await response.json()) as { detail?: string };
+      message = body.detail || message;
+    } catch {
+      // Keep the generic message when the backend does not return JSON.
+    }
+
+    throw new ApiError(message, response.status);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export function listStudents(idToken: string) {
+  return apiRequest<Student[]>("/students", idToken);
+}
+
+export function getStudent(idToken: string, studentId: string) {
+  return apiRequest<Student>(`/students/${studentId}`, idToken);
+}
+
+export function createStudent(idToken: string, payload: StudentPayload) {
+  return apiRequest<Student>("/students", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateStudent(idToken: string, studentId: string, payload: StudentPayload) {
+  return apiRequest<Student>(`/students/${studentId}`, idToken, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
 }

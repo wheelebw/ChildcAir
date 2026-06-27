@@ -261,7 +261,14 @@ async def upsert_bootstrap_admin_user(db: AsyncIOMotorDatabase, *, email: str, f
 async def build_context(db: AsyncIOMotorDatabase, user: dict[str, Any]) -> dict[str, Any]:
     site_id = user["siteId"]
     site = await db.sites.find_one({"siteId": site_id})
-    classroom_count = await db.classrooms.count_documents({"siteId": site_id, "status": "active"})
+    classroom_cursor = db.classrooms.find({"siteId": site_id, "status": "active"}).sort("sortOrder", 1)
+    classrooms = [
+        {
+            "id": str(classroom["_id"]),
+            "name": classroom["name"],
+        }
+        async for classroom in classroom_cursor
+    ]
 
     return {
         "user": {
@@ -278,5 +285,5 @@ async def build_context(db: AsyncIOMotorDatabase, user: dict[str, Any]) -> dict[
         }
         if site
         else None,
-        "classrooms": {"count": classroom_count},
+        "classrooms": {"count": len(classrooms), "items": classrooms},
     }

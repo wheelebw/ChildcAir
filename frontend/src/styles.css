@@ -22,7 +22,9 @@ button {
   font: inherit;
 }
 
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -58,6 +60,19 @@ input {
 .page {
   display: grid;
   gap: 12px;
+}
+
+.page-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-action {
+  width: auto;
+  min-width: 112px;
+  padding: 0 14px;
 }
 
 .eyebrow {
@@ -138,7 +153,9 @@ h1 {
   font-weight: 800;
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
   width: 100%;
   min-height: 48px;
   padding: 10px 12px;
@@ -148,7 +165,14 @@ h1 {
   background: #ffffff;
 }
 
-.field input:focus {
+.field textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
   outline: 3px solid #99f6e4;
   outline-offset: 1px;
   border-color: #0f766e;
@@ -185,6 +209,89 @@ h1 {
   padding: 0 10px;
   color: #0f766e;
   background: #e6fffb;
+}
+
+.back-button {
+  justify-self: start;
+}
+
+.empty-state {
+  display: grid;
+  gap: 10px;
+  padding: 24px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.empty-state h2,
+.empty-state p {
+  margin: 0;
+}
+
+.student-list {
+  display: grid;
+  gap: 10px;
+}
+
+.student-card {
+  width: 100%;
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.student-card span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.student-card strong,
+.student-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-card small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.status-pill {
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border-radius: 999px;
+  color: #0f766e;
+  background: #e6fffb;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.student-form {
+  display: grid;
+  gap: 16px;
+}
+
+.form-section-title {
+  margin: 8px 0 0;
+  font-size: 1rem;
+}
+
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .bottom-nav {
@@ -252,6 +359,15 @@ h1 {
 @media (min-width: 720px) {
   .app-main {
     padding-top: 48px;
+  }
+
+  .student-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field--wide,
+  .form-section-title {
+    grid-column: 1 / -1;
   }
 
   .bottom-nav {
