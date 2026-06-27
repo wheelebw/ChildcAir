@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import UTC, datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -11,6 +12,7 @@ from app.services.database import get_database
 from app.services.events import create_event_record, serialize_event
 
 router = APIRouter(tags=["daily care"])
+DEFAULT_SITE_TIMEZONE = "America/Chicago"
 
 ACTIVITY_EVENT_TYPES = {
     "Circle Time": "activity.circle_time",
@@ -29,6 +31,13 @@ MEAL_EVENT_TYPES = {
     "Snack": "meal.snack",
     "Lunch": "meal.lunch",
     "PM Snack": "meal.pm_snack",
+}
+
+CARE_EVENT_TYPES = {
+    "Potty": "care.potty",
+    "Diaper Wet": "care.diaper_wet",
+    "Diaper Dirty": "care.diaper_dirty",
+    "Diaper Dry": "care.diaper_dry",
 }
 
 
@@ -79,6 +88,20 @@ class MealRequest(DailyCareBase):
         return stripped
 
 
+class CareRequest(DailyCareBase):
+    careType: str = Field(..., min_length=1)
+
+    @field_validator("careType")
+    @classmethod
+    def required_care_type(cls, value: str) -> str:
+        stripped = value.strip()
+
+        if not stripped:
+            raise ValueError("Care type is required.")
+
+        return stripped
+
+
 async def _current_user_site(
     db: AsyncIOMotorDatabase,
     firebase_user: FirebaseUser,
@@ -96,6 +119,56 @@ async def _custom_list_item_or_422(db: AsyncIOMotorDatabase, site_id: str, list_
     return item
 
 
+async def _site_timezone(db: AsyncIOMotorDatabase, site_id: str) -> str:
+    site = await db.sites.find_one({"siteId": site_id}, {"timezone": 1})
+
+    if not site:
+        return DEFAULT_SITE_TIMEZONE
+
+    return site.get("timezone") or DEFAULT_SITE_TIMEZONE
+
+
+def _timezone(site_timezone: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(site_timezone)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo(DEFAULT_SITE_TIMEZONE)
+
+
+def _today_bounds(site_timezone: str) -> tuple[datetime, datetime]:
+    zone = _timezone(site_timezone)
+    today = datetime.now(zone).date()
+    start = datetime.combine(today, time.min, tzinfo=zone).astimezone(UTC)
+    end = datetime.combine(today, time.max, tzinfo=zone).astimezone(UTC)
+    return start, end
+
+
+async def _ensure_students_checked_in(db: AsyncIOMotorDatabase, site_id: str, student_ids: list[str]) -> None:
+    site_timezone = await _site_timezone(db, site_id)
+    start, end = _today_bounds(site_timezone)
+    unique_student_ids = list(dict.fromkeys(student_ids))
+    latest: dict[str, str] = {}
+    cursor = db.events.find(
+        {
+            "siteId": site_id,
+            "eventType": {"$in": ["attendance.check_in", "attendance.check_out"]},
+            "studentIds": {"$in": unique_student_ids},
+            "timestamp": {"$gte": start, "$lte": end},
+        }
+    ).sort("timestamp", -1)
+
+    async for event in cursor:
+        for student_id in event.get("studentIds", []):
+            if student_id in unique_student_ids and student_id not in latest:
+                latest[student_id] = event["eventType"]
+
+    if any(latest.get(student_id) != "attendance.check_in" for student_id in unique_student_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Daily actions can only be logged for students who are currently checked in.",
+        )
+
+
 async def _create_daily_event(
     db: AsyncIOMotorDatabase,
     *,
@@ -107,6 +180,7 @@ async def _create_daily_event(
     notes: str,
 ) -> dict[str, Any]:
     actor_user, site_id = await _current_user_site(db, firebase_user)
+    await _ensure_students_checked_in(db, site_id, payload.studentIds)
     event = await create_event_record(
         db,
         site_id=site_id,
@@ -144,6 +218,31 @@ async def log_activity(
         audit_action="activity.logged",
         metadata={"activityType": activity_type},
         notes=payload.notes or item.get("label", activity_type),
+    )
+
+
+@router.post("/care", status_code=status.HTTP_201_CREATED)
+async def log_care(
+    payload: CareRequest,
+    firebase_user: FirebaseUser = Depends(get_current_firebase_user),
+    db: AsyncIOMotorDatabase = Depends(get_database),
+) -> dict[str, Any]:
+    _, site_id = await _current_user_site(db, firebase_user)
+    care_type = payload.careType.strip()
+    item = await _custom_list_item_or_422(db, site_id, "care_type", care_type)
+    event_type = CARE_EVENT_TYPES.get(care_type)
+
+    if not event_type:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported care type.")
+
+    return await _create_daily_event(
+        db,
+        firebase_user=firebase_user,
+        payload=payload,
+        event_type=event_type,
+        audit_action="care.logged",
+        metadata={"careType": care_type},
+        notes=payload.notes or item.get("label", care_type),
     )
 
 

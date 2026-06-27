@@ -99,6 +99,10 @@ CUSTOM_LISTS = {
         "activity.sensory",
         "activity.water_play",
         "activity.field_trip",
+        "care.potty",
+        "care.diaper_wet",
+        "care.diaper_dirty",
+        "care.diaper_dry",
         "incident.created",
         "communication.sent",
         "document.uploaded",
@@ -116,6 +120,7 @@ CUSTOM_LISTS = {
         "Other",
     ],
     "meal_type": ["Snack", "Lunch", "Breakfast", "PM Snack", "Other"],
+    "care_type": ["Potty", "Diaper Wet", "Diaper Dirty", "Diaper Dry"],
     "incident_type": ["Fall", "Bite", "Scratch", "Illness", "Behavior", "Medication", "Other"],
     "incident_location": [
         "Nido Classroom",

@@ -150,6 +150,10 @@ export type MealPayload = AttendancePayload & {
   mealType: string;
 };
 
+export type CarePayload = AttendancePayload & {
+  careType: string;
+};
+
 export type IncidentSeverity = "minor" | "moderate" | "major";
 export type IncidentStatus = "open" | "resolved" | "closed";
 export type ParentNotificationMethod = "none" | "email" | "sms" | "phone" | "in_person" | "app" | "other";
@@ -347,6 +351,13 @@ export function startNap(idToken: string, payload: AttendancePayload) {
 
 export function endNap(idToken: string, payload: AttendancePayload) {
   return apiRequest<ChildcAirEvent>("/naps/end", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function logCare(idToken: string, payload: CarePayload) {
+  return apiRequest<ChildcAirEvent>("/care", idToken, {
     method: "POST",
     body: JSON.stringify(payload)
   });

@@ -16,12 +16,12 @@ const navItems: NavItem[] = [
   { id: "more", label: "More" }
 ];
 
-function renderPage(activePage: NavItem["id"]) {
+function renderPage(activePage: NavItem["id"], initialStudentId: string, onOpenStudent: (studentId: string) => void) {
   switch (activePage) {
     case "students":
-      return <StudentsPage />;
+      return <StudentsPage initialStudentId={initialStudentId} />;
     case "classrooms":
-      return <ClassroomsPage />;
+      return <ClassroomsPage onOpenStudent={onOpenStudent} />;
     case "communication":
       return <CommunicationPage />;
     case "more":
@@ -35,6 +35,17 @@ function renderPage(activePage: NavItem["id"]) {
 export default function App() {
   const { appContextError, appContextLoading, currentUser, loading, logout } = useAuth();
   const [activePage, setActivePage] = useState<NavItem["id"]>("home");
+  const [initialStudentId, setInitialStudentId] = useState("");
+
+  function openStudentProfile(studentId: string) {
+    setInitialStudentId(studentId);
+    setActivePage("students");
+  }
+
+  function selectNavPage(pageId: NavItem["id"]) {
+    setInitialStudentId("");
+    setActivePage(pageId);
+  }
 
   if (loading) {
     return (
@@ -79,8 +90,8 @@ export default function App() {
           Logout
         </button>
       </header>
-      <main className="app-main">{renderPage(activePage)}</main>
-      <BottomNav items={navItems} activeId={activePage} onSelect={setActivePage} />
+      <main className="app-main">{renderPage(activePage, initialStudentId, openStudentProfile)}</main>
+      <BottomNav items={navItems} activeId={activePage} onSelect={selectNavPage} />
     </div>
   );
 }

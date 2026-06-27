@@ -6,6 +6,7 @@ import {
   endNap,
   getClassroomAttendance,
   listClassrooms,
+  logCare,
   logActivity,
   logMeal,
   startNap,
@@ -16,6 +17,7 @@ import {
 
 type DailyAction =
   | { kind: "meal"; label: string; value: string }
+  | { kind: "care"; label: string; value: string }
   | { kind: "activity"; label: string; value: string }
   | { kind: "nap_start"; label: string }
   | { kind: "nap_end"; label: string };
@@ -29,10 +31,14 @@ const dailyActions: DailyAction[] = [
   { kind: "activity", label: "Music", value: "Music" },
   { kind: "activity", label: "Story", value: "Story Time" },
   { kind: "nap_start", label: "Nap Start" },
-  { kind: "nap_end", label: "Nap End" }
+  { kind: "nap_end", label: "Nap End" },
+  { kind: "care", label: "Potty", value: "Potty" },
+  { kind: "care", label: "Diaper Wet", value: "Diaper Wet" },
+  { kind: "care", label: "Diaper Dirty", value: "Diaper Dirty" },
+  { kind: "care", label: "Diaper Dry", value: "Diaper Dry" }
 ];
 
-export function ClassroomsPage() {
+export function ClassroomsPage({ onOpenStudent }: { onOpenStudent?: (studentId: string) => void }) {
   const { appContext, currentUser } = useAuth();
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [attendance, setAttendance] = useState<ClassroomAttendance | null>(null);
@@ -40,6 +46,7 @@ export function ClassroomsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const siteTimezone = appContext?.site?.timezone || "America/Chicago";
 
   useEffect(() => {
@@ -61,6 +68,7 @@ export function ClassroomsPage() {
 
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
       const token = await getToken();
@@ -74,6 +82,7 @@ export function ClassroomsPage() {
 
   async function openClassroom(classroomId: string) {
     setError("");
+    setSuccess("");
     setSelectedIds([]);
 
     try {
@@ -103,15 +112,19 @@ export function ClassroomsPage() {
 
     setSaving(true);
     setError("");
+    setSuccess("");
 
     try {
       const token = await getToken();
       const payload = { studentIds, classroomId: attendance.classroom.id };
+      const summary = selectedStudentSummary(studentIds, attendance.students);
 
       if (action === "check_in") {
         await checkInStudents(token, payload);
+        setSuccess(`${summary} checked in.`);
       } else {
         await checkOutStudents(token, payload);
+        setSuccess(`${summary} checked out.`);
       }
 
       setSelectedIds([]);
@@ -130,21 +143,31 @@ export function ClassroomsPage() {
 
     setSaving(true);
     setError("");
+    setSuccess("");
 
     try {
+      if (selectedIds.some((studentId) => attendance.students.find((student) => student.id === studentId)?.attendance.status !== "checked_in")) {
+        setError("Daily actions can only be logged for students who are currently checked in.");
+        return;
+      }
+
       const token = await getToken();
       const payload = { studentIds: selectedIds, classroomId: attendance.classroom.id };
+      const summary = selectedStudentSummary(selectedIds, attendance.students);
 
       if (action.kind === "meal") {
         await logMeal(token, { ...payload, mealType: action.value });
       } else if (action.kind === "activity") {
         await logActivity(token, { ...payload, activityType: action.value });
+      } else if (action.kind === "care") {
+        await logCare(token, { ...payload, careType: action.value });
       } else if (action.kind === "nap_start") {
         await startNap(token, payload);
       } else {
         await endNap(token, payload);
       }
 
+      setSuccess(successMessage(action, summary));
       setSelectedIds([]);
       await refreshAttendance();
     } catch (saveError) {
@@ -155,12 +178,17 @@ export function ClassroomsPage() {
   }
 
   function toggleSelected(studentId: string) {
+    setSuccess("");
     setSelectedIds((current) =>
       current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]
     );
   }
 
   if (attendance) {
+    const hasCheckedInSelection = selectedIds.some(
+      (studentId) => attendance.students.find((student) => student.id === studentId)?.attendance.status === "checked_in"
+    );
+
     return (
       <section className="page">
         <button className="text-button back-button" type="button" onClick={() => setAttendance(null)}>
@@ -177,6 +205,10 @@ export function ClassroomsPage() {
           {selectedIds.length > 0 ? `${selectedIds.length} selected. Choose an attendance or daily action.` : "Select students, then tap an action."}
         </p>
         {error ? <p className="form-error">{error}</p> : null}
+        {success ? <p className="form-success">{success}</p> : null}
+        {selectedIds.length > 0 && !hasCheckedInSelection ? (
+          <p className="form-error">Daily actions can only be logged for students who are currently checked in.</p>
+        ) : null}
         <div className="bulk-actions">
           <button
             className="primary-button"
@@ -201,7 +233,7 @@ export function ClassroomsPage() {
             {dailyActions.map((action) => (
               <button
                 className="text-button"
-                disabled={saving || selectedIds.length === 0}
+                disabled={saving || selectedIds.length === 0 || !hasCheckedInSelection}
                 key={action.label}
                 type="button"
                 onClick={() => writeDailyAction(action)}
@@ -227,7 +259,9 @@ export function ClassroomsPage() {
                   type="checkbox"
                 />
                 <span>
-                  <strong>{studentName(student)}</strong>
+                  <button className="inline-link" type="button" onClick={() => onOpenStudent?.(student.id)}>
+                    {studentName(student)}
+                  </button>
                   <small>{statusText(student.attendance.status, student.attendance.timestamp, siteTimezone)}</small>
                 </span>
               </label>
@@ -274,6 +308,27 @@ export function ClassroomsPage() {
       </div>
     </section>
   );
+}
+
+function selectedStudentSummary(studentIds: string[], students: ClassroomAttendance["students"]) {
+  if (studentIds.length === 1) {
+    const student = students.find((item) => item.id === studentIds[0]);
+    return student ? studentName(student) : "1 student";
+  }
+
+  return `${studentIds.length} students`;
+}
+
+function successMessage(action: DailyAction, summary: string) {
+  if (action.kind === "nap_start") {
+    return `Nap started for ${summary}.`;
+  }
+
+  if (action.kind === "nap_end") {
+    return `Nap ended for ${summary}.`;
+  }
+
+  return `${action.label} logged for ${summary}.`;
 }
 
 function AttendanceSummary({ counts }: { counts: Classroom["attendance"] }) {

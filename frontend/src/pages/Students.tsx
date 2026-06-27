@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { IncidentsPage } from "./Incidents";
 import { useAuth } from "../context/AuthContext";
 import {
   createStudent,
@@ -14,7 +15,8 @@ import {
   type StudentPayload
 } from "../services/api";
 
-type ViewMode = "list" | "new" | "detail" | "edit";
+type ViewMode = "list" | "new" | "detail" | "edit" | "incident-new";
+type ProfileTab = "profile" | "timeline" | "incidents";
 
 type StudentFormState = {
   firstName: string;
@@ -54,13 +56,14 @@ const statusLabels: Record<Student["status"], string> = {
   graduated: "Graduated"
 };
 
-export function StudentsPage() {
+export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: string }) {
   const { appContext, currentUser } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<ChildcAirEvent[]>([]);
   const [selectedIncidents, setSelectedIncidents] = useState<Incident[]>([]);
   const [mode, setMode] = useState<ViewMode>("list");
+  const [profileTab, setProfileTab] = useState<ProfileTab>("profile");
   const [form, setForm] = useState<StudentFormState>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -77,6 +80,12 @@ export function StudentsPage() {
   useEffect(() => {
     void loadStudents();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (initialStudentId) {
+      void openStudent(initialStudentId);
+    }
+  }, [initialStudentId, currentUser]);
 
   async function getToken() {
     if (!currentUser) {
@@ -115,6 +124,7 @@ export function StudentsPage() {
       setSelectedStudent(student);
       setSelectedEvents(events);
       setSelectedIncidents(incidents);
+      setProfileTab("profile");
       setMode("detail");
     } catch (loadError) {
       setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load student. Please try again.");
@@ -190,6 +200,24 @@ export function StudentsPage() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  async function refreshSelectedStudentActivity(studentId: string) {
+    const token = await getToken();
+    const [events, incidents] = await Promise.all([listStudentEvents(token, studentId), listStudentIncidents(token, studentId)]);
+    setSelectedEvents(events);
+    setSelectedIncidents(incidents);
+  }
+
+  async function finishIncidentForSelectedStudent() {
+    if (!selectedStudent) {
+      setMode("list");
+      return;
+    }
+
+    await refreshSelectedStudentActivity(selectedStudent.id);
+    setProfileTab("incidents");
+    setMode("detail");
+  }
+
   if (mode === "new" || mode === "edit") {
     return (
       <StudentForm
@@ -205,6 +233,17 @@ export function StudentsPage() {
     );
   }
 
+  if (mode === "incident-new" && selectedStudent) {
+    return (
+      <IncidentsPage
+        initialStudentId={selectedStudent.id}
+        onBack={() => setMode("detail")}
+        onIncidentSaved={() => void finishIncidentForSelectedStudent()}
+        startInNewMode
+      />
+    );
+  }
+
   if (mode === "detail" && selectedStudent) {
     return (
       <StudentProfile
@@ -213,6 +252,8 @@ export function StudentsPage() {
         incidents={selectedIncidents}
         onBack={() => setMode("list")}
         onEdit={startEditStudent}
+        onNewIncident={() => setMode("incident-new")}
+        initialTab={profileTab}
         siteTimezone={siteTimezone}
         student={selectedStudent}
       />
@@ -378,6 +419,8 @@ function StudentProfile({
   incidents,
   onBack,
   onEdit,
+  onNewIncident,
+  initialTab,
   siteTimezone,
   student
 }: {
@@ -386,12 +429,14 @@ function StudentProfile({
   incidents: Incident[];
   onBack: () => void;
   onEdit: () => void;
+  onNewIncident: () => void;
+  initialTab: ProfileTab;
   siteTimezone: string;
   student: Student;
 }) {
   const guardian = student.guardians[0];
   const groupedEvents = groupEventsByDay(events, siteTimezone);
-  const [activeTab, setActiveTab] = useState<"profile" | "timeline" | "incidents">("profile");
+  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
 
   return (
     <section className="page">
@@ -496,7 +541,12 @@ function StudentProfile({
       ) : null}
       {activeTab === "incidents" ? (
       <section className="timeline-section" aria-labelledby="incidents-heading">
-        <h2 id="incidents-heading">Incidents</h2>
+        <div className="section-header">
+          <h2 id="incidents-heading">Incidents</h2>
+          <button className="primary-button section-action" type="button" onClick={onNewIncident}>
+            + New Incident
+          </button>
+        </div>
         {incidents.length === 0 ? <p className="page-copy">No incidents reported.</p> : null}
         <div className="incident-list">
           {incidents.map((incident) => (
@@ -575,6 +625,10 @@ function eventTypeLabel(eventType: string) {
     "activity.sensory": "Sensory Activity",
     "activity.water_play": "Water Play",
     "activity.field_trip": "Field Trip",
+    "care.potty": "Potty",
+    "care.diaper_wet": "Diaper Wet",
+    "care.diaper_dirty": "Diaper Dirty",
+    "care.diaper_dry": "Diaper Dry",
     "incident.created": "Incident Created",
     "communication.sent": "Communication Sent",
     "document.uploaded": "Document Uploaded"

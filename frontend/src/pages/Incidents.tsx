@@ -59,15 +59,27 @@ const statusLabels: Record<IncidentStatus, string> = {
   closed: "Closed"
 };
 
-export function IncidentsPage({ onBack }: { onBack?: () => void }) {
+export function IncidentsPage({
+  initialStudentId = "",
+  onBack,
+  onIncidentSaved,
+  startInNewMode = false
+}: {
+  initialStudentId?: string;
+  onBack?: () => void;
+  onIncidentSaved?: (incident: Incident) => void;
+  startInNewMode?: boolean;
+}) {
   const { appContext, currentUser } = useAuth();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [incidentTypes, setIncidentTypes] = useState<CustomListItem[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [mode, setMode] = useState<ViewMode>("list");
-  const [form, setForm] = useState<IncidentFormState>(() => emptyForm(appContext?.site?.timezone || "America/Chicago"));
+  const [mode, setMode] = useState<ViewMode>(startInNewMode ? "new" : "list");
+  const [form, setForm] = useState<IncidentFormState>(() =>
+    emptyForm(appContext?.site?.timezone || "America/Chicago", initialStudentId)
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -132,7 +144,7 @@ export function IncidentsPage({ onBack }: { onBack?: () => void }) {
 
   function startNewIncident() {
     setSelectedIncident(null);
-    setForm(emptyForm(siteTimezone));
+    setForm(emptyForm(siteTimezone, initialStudentId));
     setMode("new");
     setError("");
   }
@@ -161,6 +173,7 @@ export function IncidentsPage({ onBack }: { onBack?: () => void }) {
           : await createIncident(token, payload);
       setSelectedIncident(savedIncident);
       setIncidents(await listIncidents(token));
+      onIncidentSaved?.(savedIncident);
       setMode("detail");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save incident.");
@@ -193,7 +206,7 @@ export function IncidentsPage({ onBack }: { onBack?: () => void }) {
         form={form}
         incidentTypes={incidentTypes}
         mode={mode}
-        onCancel={() => setMode(selectedIncident ? "detail" : "list")}
+        onCancel={() => (startInNewMode && onBack ? onBack() : setMode(selectedIncident ? "detail" : "list"))}
         onChange={updateField}
         onSubmit={handleSubmit}
         saving={saving}
@@ -475,9 +488,9 @@ function IncidentDetail({
   );
 }
 
-function emptyForm(siteTimezone: string): IncidentFormState {
+function emptyForm(siteTimezone: string, studentId = ""): IncidentFormState {
   return {
-    studentId: "",
+    studentId,
     classroomId: "",
     incidentType: "",
     severity: "minor",
