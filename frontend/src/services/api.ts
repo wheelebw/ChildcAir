@@ -87,6 +87,49 @@ export type EventPayload = {
   metadata?: Record<string, unknown>;
 };
 
+export type AttendanceStatus = "checked_in" | "checked_out" | "not_checked_in";
+
+export type ClassroomAttendanceCounts = {
+  checked_in: number;
+  checked_out: number;
+  not_checked_in: number;
+};
+
+export type Classroom = {
+  id: string;
+  siteId: string;
+  name: string;
+  status: string;
+  sortOrder: number;
+  attendance: ClassroomAttendanceCounts;
+};
+
+export type ClassroomAttendanceStudent = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  preferredName: string;
+  defaultClassroomId: string;
+  status: string;
+  attendance: {
+    status: AttendanceStatus;
+    timestamp: string;
+    eventId: string;
+  };
+};
+
+export type ClassroomAttendance = {
+  classroom: Classroom;
+  students: ClassroomAttendanceStudent[];
+};
+
+export type AttendancePayload = {
+  studentIds: string[];
+  classroomId: string;
+  timestamp?: string;
+  notes?: string;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -185,6 +228,28 @@ export function listStudentEvents(idToken: string, studentId: string) {
 
 export function createEvent(idToken: string, payload: EventPayload) {
   return apiRequest<ChildcAirEvent>("/events", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listClassrooms(idToken: string) {
+  return apiRequest<Classroom[]>("/classrooms", idToken);
+}
+
+export function getClassroomAttendance(idToken: string, classroomId: string) {
+  return apiRequest<ClassroomAttendance>(`/classrooms/${classroomId}/attendance`, idToken);
+}
+
+export function checkInStudents(idToken: string, payload: AttendancePayload) {
+  return apiRequest<ChildcAirEvent>("/attendance/check-in", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function checkOutStudents(idToken: string, payload: AttendancePayload) {
+  return apiRequest<ChildcAirEvent>("/attendance/check-out", idToken, {
     method: "POST",
     body: JSON.stringify(payload)
   });

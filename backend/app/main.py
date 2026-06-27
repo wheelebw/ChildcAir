@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers.bootstrap import router as bootstrap_router
+from app.routers.classrooms import router as classrooms_router
 from app.routers.events import router as events_router
 from app.routers.students import router as students_router
 from app.services.database import check_database_connection, close_mongo_connection, connect_to_mongo
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(bootstrap_router)
+app.include_router(classrooms_router)
 app.include_router(events_router)
 app.include_router(students_router)
 

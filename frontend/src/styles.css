@@ -234,6 +234,83 @@ h1 {
   gap: 10px;
 }
 
+.classroom-list,
+.attendance-list {
+  display: grid;
+  gap: 10px;
+}
+
+.classroom-card,
+.attendance-card {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  text-align: left;
+}
+
+.classroom-card {
+  cursor: pointer;
+}
+
+.attendance-summary {
+  display: grid;
+  gap: 4px;
+  color: #526070;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.bulk-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.bulk-actions .primary-button,
+.bulk-actions .text-button {
+  width: 100%;
+}
+
+.attendance-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.attendance-select {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.attendance-select input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.attendance-select span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.attendance-select strong,
+.attendance-select small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance-select small {
+  color: #64748b;
+  font-weight: 700;
+}
+
 .student-card {
   width: 100%;
   min-height: 72px;
@@ -440,6 +517,11 @@ h1 {
 
   .student-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .attendance-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 
   .field--wide,
