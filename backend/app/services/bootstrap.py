@@ -95,6 +95,17 @@ CUSTOM_LISTS = {
         "document.uploaded",
     ],
     "incident_type": ["Fall", "Bite", "Scratch", "Illness", "Behavior", "Medication", "Other"],
+    "incident_location": [
+        "Nido Classroom",
+        "Toddler Classroom",
+        "Toddler Bathroom",
+        "Littles Playground",
+        "Primary Classroom",
+        "Primary Bathroom",
+        "Primary Classroom Kitchen",
+        "Primary Playground",
+        "Other",
+    ],
     "document_type": [
         "Enrollment Form",
         "Immunization Record",

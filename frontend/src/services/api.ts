@@ -87,6 +87,17 @@ export type EventPayload = {
   metadata?: Record<string, unknown>;
 };
 
+export type CustomListItem = {
+  id: string;
+  siteId: string;
+  listKey: string;
+  value: string;
+  label: string;
+  active: boolean;
+  sortOrder: number;
+  systemDefault: boolean;
+};
+
 export type AttendanceStatus = "checked_in" | "checked_out" | "not_checked_in";
 
 export type ClassroomAttendanceCounts = {
@@ -231,6 +242,10 @@ export function createEvent(idToken: string, payload: EventPayload) {
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export function listCustomListItems(idToken: string, listKey: string) {
+  return apiRequest<CustomListItem[]>(`/custom-lists/${encodeURIComponent(listKey)}`, idToken);
 }
 
 export function listClassrooms(idToken: string) {
