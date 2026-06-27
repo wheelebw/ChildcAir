@@ -3,12 +3,34 @@ import { useAuth } from "../context/AuthContext";
 import {
   checkInStudents,
   checkOutStudents,
+  endNap,
   getClassroomAttendance,
   listClassrooms,
+  logActivity,
+  logMeal,
+  startNap,
   type AttendanceStatus,
   type Classroom,
   type ClassroomAttendance
 } from "../services/api";
+
+type DailyAction =
+  | { kind: "meal"; label: string; value: string }
+  | { kind: "activity"; label: string; value: string }
+  | { kind: "nap_start"; label: string }
+  | { kind: "nap_end"; label: string };
+
+const dailyActions: DailyAction[] = [
+  { kind: "meal", label: "Snack", value: "Snack" },
+  { kind: "meal", label: "Lunch", value: "Lunch" },
+  { kind: "activity", label: "Circle Time", value: "Circle Time" },
+  { kind: "activity", label: "Outside", value: "Outside Time" },
+  { kind: "activity", label: "Art", value: "Art" },
+  { kind: "activity", label: "Music", value: "Music" },
+  { kind: "activity", label: "Story", value: "Story Time" },
+  { kind: "nap_start", label: "Nap Start" },
+  { kind: "nap_end", label: "Nap End" }
+];
 
 export function ClassroomsPage() {
   const { appContext, currentUser } = useAuth();
@@ -101,6 +123,37 @@ export function ClassroomsPage() {
     }
   }
 
+  async function writeDailyAction(action: DailyAction) {
+    if (!attendance || selectedIds.length === 0) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const token = await getToken();
+      const payload = { studentIds: selectedIds, classroomId: attendance.classroom.id };
+
+      if (action.kind === "meal") {
+        await logMeal(token, { ...payload, mealType: action.value });
+      } else if (action.kind === "activity") {
+        await logActivity(token, { ...payload, activityType: action.value });
+      } else if (action.kind === "nap_start") {
+        await startNap(token, payload);
+      } else {
+        await endNap(token, payload);
+      }
+
+      setSelectedIds([]);
+      await refreshAttendance();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to log daily action.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function toggleSelected(studentId: string) {
     setSelectedIds((current) =>
       current.includes(studentId) ? current.filter((id) => id !== studentId) : [...current, studentId]
@@ -139,6 +192,22 @@ export function ClassroomsPage() {
             Check Out Selected
           </button>
         </div>
+        <section className="daily-actions" aria-labelledby="daily-actions-heading">
+          <h2 id="daily-actions-heading">Daily Actions</h2>
+          <div className="daily-actions__grid">
+            {dailyActions.map((action) => (
+              <button
+                className="text-button"
+                disabled={saving || selectedIds.length === 0}
+                key={action.label}
+                type="button"
+                onClick={() => writeDailyAction(action)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </section>
         <div className="attendance-list">
           {attendance.students.map((student) => (
             <article className="attendance-card" key={student.id}>

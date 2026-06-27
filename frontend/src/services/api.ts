@@ -142,6 +142,14 @@ export type AttendancePayload = {
   notes?: string;
 };
 
+export type ActivityPayload = AttendancePayload & {
+  activityType: string;
+};
+
+export type MealPayload = AttendancePayload & {
+  mealType: string;
+};
+
 export type IncidentSeverity = "minor" | "moderate" | "major";
 export type IncidentStatus = "open" | "resolved" | "closed";
 export type ParentNotificationMethod = "none" | "email" | "sms" | "phone" | "in_person" | "app" | "other";
@@ -311,6 +319,34 @@ export function checkInStudents(idToken: string, payload: AttendancePayload) {
 
 export function checkOutStudents(idToken: string, payload: AttendancePayload) {
   return apiRequest<ChildcAirEvent>("/attendance/check-out", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function logActivity(idToken: string, payload: ActivityPayload) {
+  return apiRequest<ChildcAirEvent>("/activities", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function logMeal(idToken: string, payload: MealPayload) {
+  return apiRequest<ChildcAirEvent>("/meals", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function startNap(idToken: string, payload: AttendancePayload) {
+  return apiRequest<ChildcAirEvent>("/naps/start", idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function endNap(idToken: string, payload: AttendancePayload) {
+  return apiRequest<ChildcAirEvent>("/naps/end", idToken, {
     method: "POST",
     body: JSON.stringify(payload)
   });
