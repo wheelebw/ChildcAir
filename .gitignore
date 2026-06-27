@@ -27,3 +27,6 @@ backend/.venv/
 Thumbs.db
 .idea/
 .vscode/
+
+firebase-service-account.json
+*.service-account.json

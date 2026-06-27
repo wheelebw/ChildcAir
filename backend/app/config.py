@@ -30,6 +30,7 @@ class Settings:
     firebase_project_id: str | None = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("VITE_FIREBASE_PROJECT_ID")
     firebase_client_email: str | None = os.getenv("FIREBASE_CLIENT_EMAIL")
     firebase_private_key: str | None = os.getenv("FIREBASE_PRIVATE_KEY")
+    google_application_credentials: str | None = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 
 settings = Settings()
