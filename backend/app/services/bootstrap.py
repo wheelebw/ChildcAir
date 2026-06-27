@@ -77,6 +77,23 @@ ROLE_TEMPLATES = {
 
 CLASSROOMS = ["Nido", "Toddler", "Primary", "Elementary", "Aftercare"]
 CUSTOM_LISTS = {
+    "event_type": [
+        "attendance.check_in",
+        "attendance.check_out",
+        "attendance.absent",
+        "attendance.late",
+        "movement.classroom_change",
+        "nap.started",
+        "nap.ended",
+        "meal.snack",
+        "meal.lunch",
+        "activity.circle_time",
+        "activity.outside",
+        "activity.group",
+        "incident.created",
+        "communication.sent",
+        "document.uploaded",
+    ],
     "incident_type": ["Fall", "Bite", "Scratch", "Illness", "Behavior", "Medication", "Other"],
     "document_type": [
         "Enrollment Form",

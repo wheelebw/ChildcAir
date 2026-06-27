@@ -294,6 +294,83 @@ h1 {
   gap: 10px;
 }
 
+.profile-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.profile-tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  color: #64748b;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.profile-tab--active {
+  color: #0f766e;
+  background: #e6fffb;
+}
+
+.profile-section,
+.timeline-section {
+  display: grid;
+  gap: 14px;
+}
+
+.timeline-section h2,
+.timeline-day h3 {
+  margin: 0;
+}
+
+.timeline-day {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-day h3 {
+  color: #526070;
+  font-size: 0.9rem;
+}
+
+.timeline-list {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.timeline-item time {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.timeline-item strong {
+  display: block;
+}
+
+.timeline-item p {
+  margin: 4px 0 0;
+  color: #526070;
+  line-height: 1.4;
+}
+
 .bottom-nav {
   position: fixed;
   right: 0;

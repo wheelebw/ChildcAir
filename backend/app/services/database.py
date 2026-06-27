@@ -58,6 +58,8 @@ async def ensure_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.classrooms.create_index([("siteId", ASCENDING), ("name", ASCENDING)], unique=True)
     await db.custom_lists.create_index([("siteId", ASCENDING), ("listKey", ASCENDING), ("value", ASCENDING)], unique=True)
     await db.students.create_index([("siteId", ASCENDING), ("lastName", ASCENDING), ("firstName", ASCENDING)])
+    await db.events.create_index([("siteId", ASCENDING), ("studentIds", ASCENDING), ("timestamp", ASCENDING)])
+    await db.events.create_index([("siteId", ASCENDING), ("eventType", ASCENDING), ("timestamp", ASCENDING)])
     await db.audit_logs.create_index([("siteId", ASCENDING), ("timestamp", ASCENDING)])
 
 

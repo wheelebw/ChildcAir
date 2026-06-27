@@ -3,8 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import {
   createStudent,
   getStudent,
+  listStudentEvents,
   listStudents,
   updateStudent,
+  type ChildcAirEvent,
   type Guardian,
   type Student,
   type StudentPayload
@@ -54,6 +56,7 @@ export function StudentsPage() {
   const { appContext, currentUser } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedEvents, setSelectedEvents] = useState<ChildcAirEvent[]>([]);
   const [mode, setMode] = useState<ViewMode>("list");
   const [form, setForm] = useState<StudentFormState>(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -102,7 +105,9 @@ export function StudentsPage() {
     try {
       const token = await getToken();
       const student = await getStudent(token, studentId);
+      const events = await listStudentEvents(token, studentId);
       setSelectedStudent(student);
+      setSelectedEvents(events);
       setMode("detail");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load student.");
@@ -154,6 +159,7 @@ export function StudentsPage() {
           : await createStudent(token, payload);
 
       setSelectedStudent(savedStudent);
+      setSelectedEvents(mode === "edit" ? await listStudentEvents(token, savedStudent.id) : []);
       setMode("detail");
       setStudents(await listStudents(token));
     } catch (saveError) {
@@ -186,6 +192,7 @@ export function StudentsPage() {
     return (
       <StudentProfile
         classroomName={classroomNames[selectedStudent.defaultClassroomId] ?? ""}
+        events={selectedEvents}
         onBack={() => setMode("list")}
         onEdit={startEditStudent}
         student={selectedStudent}
@@ -347,16 +354,20 @@ function StudentForm({
 
 function StudentProfile({
   classroomName,
+  events,
   onBack,
   onEdit,
   student
 }: {
   classroomName: string;
+  events: ChildcAirEvent[];
   onBack: () => void;
   onEdit: () => void;
   student: Student;
 }) {
   const guardian = student.guardians[0];
+  const groupedEvents = groupEventsByDay(events);
+  const [activeTab, setActiveTab] = useState<"profile" | "timeline">("profile");
 
   return (
     <section className="page">
@@ -372,44 +383,86 @@ function StudentProfile({
           Edit
         </button>
       </div>
-      <dl className="user-details">
-        <div>
-          <dt>Birthdate</dt>
-          <dd>{student.birthdate || "Not provided"}</dd>
-        </div>
-        <div>
-          <dt>Default classroom</dt>
-          <dd>{classroomName || "No classroom assigned"}</dd>
-        </div>
-        <div>
-          <dt>Status</dt>
-          <dd>{statusLabels[student.status]}</dd>
-        </div>
-        <div>
-          <dt>Allergies</dt>
-          <dd>{student.allergies.length ? student.allergies.join(", ") : "None listed"}</dd>
-        </div>
-        <div>
-          <dt>Medical notes</dt>
-          <dd>{student.medicalNotes || "None listed"}</dd>
-        </div>
-        <div>
-          <dt>Guardian</dt>
-          <dd>
-            {guardian ? (
-              <>
-                {guardian.name || "Unnamed guardian"}
-                <br />
-                {guardian.relationship || "Relationship not provided"}
-                <br />
-                {guardian.phone || "No phone"} · {guardian.email || "No email"}
-              </>
-            ) : (
-              "No guardian listed"
-            )}
-          </dd>
-        </div>
-      </dl>
+      <div className="profile-tabs" role="tablist" aria-label="Student profile sections">
+        <button
+          className={`profile-tab${activeTab === "profile" ? " profile-tab--active" : ""}`}
+          type="button"
+          onClick={() => setActiveTab("profile")}
+        >
+          Profile
+        </button>
+        <button
+          className={`profile-tab${activeTab === "timeline" ? " profile-tab--active" : ""}`}
+          type="button"
+          onClick={() => setActiveTab("timeline")}
+        >
+          Timeline
+        </button>
+      </div>
+      {activeTab === "profile" ? (
+      <section className="profile-section">
+        <dl className="user-details">
+          <div>
+            <dt>Birthdate</dt>
+            <dd>{student.birthdate || "Not provided"}</dd>
+          </div>
+          <div>
+            <dt>Default classroom</dt>
+            <dd>{classroomName || "No classroom assigned"}</dd>
+          </div>
+          <div>
+            <dt>Status</dt>
+            <dd>{statusLabels[student.status]}</dd>
+          </div>
+          <div>
+            <dt>Allergies</dt>
+            <dd>{student.allergies.length ? student.allergies.join(", ") : "None listed"}</dd>
+          </div>
+          <div>
+            <dt>Medical notes</dt>
+            <dd>{student.medicalNotes || "None listed"}</dd>
+          </div>
+          <div>
+            <dt>Guardian</dt>
+            <dd>
+              {guardian ? (
+                <>
+                  {guardian.name || "Unnamed guardian"}
+                  <br />
+                  {guardian.relationship || "Relationship not provided"}
+                  <br />
+                  {guardian.phone || "No phone"} / {guardian.email || "No email"}
+                </>
+              ) : (
+                "No guardian listed"
+              )}
+            </dd>
+          </div>
+        </dl>
+      </section>
+      ) : null}
+      {activeTab === "timeline" ? (
+      <section className="timeline-section" aria-labelledby="timeline-heading">
+        <h2 id="timeline-heading">Timeline</h2>
+        {events.length === 0 ? <p className="page-copy">No timeline events yet.</p> : null}
+        {groupedEvents.map((group) => (
+          <div className="timeline-day" key={group.label}>
+            <h3>{group.label}</h3>
+            <div className="timeline-list">
+              {group.events.map((event) => (
+                <article className="timeline-item" key={event.id}>
+                  <time>{formatEventTime(event.timestamp)}</time>
+                  <div>
+                    <strong>{eventTypeLabel(event.eventType)}</strong>
+                    {event.notes ? <p>{event.notes}</p> : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+      ) : null}
     </section>
   );
 }
@@ -444,4 +497,58 @@ function toPayload(form: StudentFormState): StudentPayload {
 
 function studentName(student: Student) {
   return [student.preferredName || student.firstName, student.lastName].filter(Boolean).join(" ");
+}
+
+function eventTypeLabel(eventType: string) {
+  const labels: Record<string, string> = {
+    "attendance.check_in": "Checked In",
+    "attendance.check_out": "Checked Out",
+    "attendance.absent": "Absent",
+    "attendance.late": "Late",
+    "movement.classroom_change": "Classroom Change",
+    "nap.started": "Nap Started",
+    "nap.ended": "Nap Ended",
+    "meal.snack": "Snack",
+    "meal.lunch": "Lunch",
+    "activity.circle_time": "Circle Time",
+    "activity.outside": "Outside",
+    "activity.group": "Group Activity",
+    "incident.created": "Incident Created",
+    "communication.sent": "Communication Sent",
+    "document.uploaded": "Document Uploaded"
+  };
+
+  return labels[eventType] ?? eventType;
+}
+
+function groupEventsByDay(events: ChildcAirEvent[]) {
+  const groups = new Map<string, ChildcAirEvent[]>();
+
+  events.forEach((event) => {
+    const label = formatEventDay(event.timestamp);
+    groups.set(label, [...(groups.get(label) ?? []), event]);
+  });
+
+  return Array.from(groups.entries()).map(([label, groupEvents]) => ({ label, events: groupEvents }));
+}
+
+function formatEventDay(timestamp: string) {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  }
+
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatEventTime(timestamp: string) {
+  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }

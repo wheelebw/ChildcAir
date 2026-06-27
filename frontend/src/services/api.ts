@@ -64,6 +64,29 @@ export type StudentPayload = {
   guardians: Guardian[];
 };
 
+export type ChildcAirEvent = {
+  id: string;
+  siteId: string;
+  eventType: string;
+  studentIds: string[];
+  classroomId: string;
+  timestamp: string;
+  createdBy: string;
+  notes: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EventPayload = {
+  eventType: string;
+  studentIds: string[];
+  classroomId?: string;
+  timestamp?: string;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -152,6 +175,17 @@ export function createStudent(idToken: string, payload: StudentPayload) {
 export function updateStudent(idToken: string, studentId: string, payload: StudentPayload) {
   return apiRequest<Student>(`/students/${studentId}`, idToken, {
     method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function listStudentEvents(idToken: string, studentId: string) {
+  return apiRequest<ChildcAirEvent[]>(`/students/${studentId}/events`, idToken);
+}
+
+export function createEvent(idToken: string, payload: EventPayload) {
+  return apiRequest<ChildcAirEvent>("/events", idToken, {
+    method: "POST",
     body: JSON.stringify(payload)
   });
 }
