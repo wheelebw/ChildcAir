@@ -112,7 +112,7 @@ export function IncidentsPage({ onBack }: { onBack?: () => void }) {
       setClassrooms(classroomList);
       setIncidentTypes(typeList);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load incidents.");
+      setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load incidents. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -126,7 +126,7 @@ export function IncidentsPage({ onBack }: { onBack?: () => void }) {
       setSelectedIncident(await getIncident(token, incidentId));
       setMode("detail");
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load incident.");
+      setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load incident. Please try again.");
     }
   }
 
@@ -235,8 +235,8 @@ export function IncidentsPage({ onBack }: { onBack?: () => void }) {
       {loading ? <p className="page-copy">Loading incidents...</p> : null}
       {!loading && incidents.length === 0 ? (
         <div className="empty-state">
-          <h2>No incidents yet.</h2>
-          <p>Create an incident report when something needs a formal record.</p>
+          <h2>No incidents reported.</h2>
+          <p>Create an incident report only when something needs a formal record.</p>
           <button className="primary-button" type="button" onClick={startNewIncident}>
             Add Incident
           </button>

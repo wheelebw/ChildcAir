@@ -66,7 +66,7 @@ export function ClassroomsPage() {
       const token = await getToken();
       setClassrooms(await listClassrooms(token));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load classrooms.");
+      setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load classrooms. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -80,7 +80,7 @@ export function ClassroomsPage() {
       const token = await getToken();
       setAttendance(await getClassroomAttendance(token, classroomId));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load attendance.");
+      setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load attendance. Please try again.");
     }
   }
 
@@ -173,6 +173,9 @@ export function ClassroomsPage() {
           </div>
         </div>
         <AttendanceSummary counts={attendance.classroom.attendance} />
+        <p className="page-copy">
+          {selectedIds.length > 0 ? `${selectedIds.length} selected. Choose an attendance or daily action.` : "Select students, then tap an action."}
+        </p>
         {error ? <p className="form-error">{error}</p> : null}
         <div className="bulk-actions">
           <button
@@ -208,6 +211,12 @@ export function ClassroomsPage() {
             ))}
           </div>
         </section>
+        {attendance.students.length === 0 ? (
+          <div className="empty-state">
+            <h2>No students assigned.</h2>
+            <p>Assign active students to this classroom before taking attendance.</p>
+          </div>
+        ) : null}
         <div className="attendance-list">
           {attendance.students.map((student) => (
             <article className="attendance-card" key={student.id}>
@@ -249,6 +258,12 @@ export function ClassroomsPage() {
       <h1>Classrooms</h1>
       {error ? <p className="form-error">{error}</p> : null}
       {loading ? <p className="page-copy">Loading classrooms...</p> : null}
+      {!loading && classrooms.length === 0 ? (
+        <div className="empty-state">
+          <h2>No classrooms available.</h2>
+          <p>Classrooms will appear here after site setup is complete.</p>
+        </div>
+      ) : null}
       <div className="classroom-list">
         {classrooms.map((classroom) => (
           <button className="classroom-card" key={classroom.id} type="button" onClick={() => openClassroom(classroom.id)}>

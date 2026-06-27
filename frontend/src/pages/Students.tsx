@@ -63,6 +63,7 @@ export function StudentsPage() {
   const [mode, setMode] = useState<ViewMode>("list");
   const [form, setForm] = useState<StudentFormState>(emptyForm);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -97,7 +98,7 @@ export function StudentsPage() {
       const token = await getToken();
       setStudents(await listStudents(token));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load students.");
+      setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load students. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -105,6 +106,7 @@ export function StudentsPage() {
 
   async function openStudent(studentId: string) {
     setError("");
+    setDetailLoading(true);
 
     try {
       const token = await getToken();
@@ -115,15 +117,17 @@ export function StudentsPage() {
       setSelectedIncidents(incidents);
       setMode("detail");
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load student.");
+      setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load student. Please try again.");
+    } finally {
+      setDetailLoading(false);
     }
   }
 
   function startNewStudent() {
     setForm(emptyForm);
-      setSelectedStudent(null);
-      setSelectedIncidents([]);
-      setMode("new");
+    setSelectedStudent(null);
+    setSelectedIncidents([]);
+    setMode("new");
     setError("");
   }
 
@@ -230,11 +234,12 @@ export function StudentsPage() {
       {error ? <p className="form-error">{error}</p> : null}
 
       {loading ? <p className="page-copy">Loading students...</p> : null}
+      {detailLoading ? <p className="page-copy">Loading timeline...</p> : null}
 
       {!loading && students.length === 0 ? (
         <div className="empty-state">
-          <h2>No students yet.</h2>
-          <p>Add your first student.</p>
+          <h2>No students enrolled.</h2>
+          <p>Add a student when the pilot classroom is ready.</p>
           <button className="primary-button" type="button" onClick={startNewStudent}>
             Add Student
           </button>
@@ -470,7 +475,7 @@ function StudentProfile({
       {activeTab === "timeline" ? (
       <section className="timeline-section" aria-labelledby="timeline-heading">
         <h2 id="timeline-heading">Timeline</h2>
-        {events.length === 0 ? <p className="page-copy">No timeline events yet.</p> : null}
+        {events.length === 0 ? <p className="page-copy">No activity yet.</p> : null}
         {groupedEvents.map((group) => (
           <div className="timeline-day" key={group.label}>
             <h3>{group.label}</h3>
@@ -492,7 +497,7 @@ function StudentProfile({
       {activeTab === "incidents" ? (
       <section className="timeline-section" aria-labelledby="incidents-heading">
         <h2 id="incidents-heading">Incidents</h2>
-        {incidents.length === 0 ? <p className="page-copy">No incidents recorded.</p> : null}
+        {incidents.length === 0 ? <p className="page-copy">No incidents reported.</p> : null}
         <div className="incident-list">
           {incidents.map((incident) => (
             <article className="incident-card" key={incident.id}>
