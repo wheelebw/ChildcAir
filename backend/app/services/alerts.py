@@ -1,14 +1,59 @@
-from datetime import UTC, datetime, timedelta
+import logging
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 ALERT_SEVERITIES = ("critical", "important", "warning", "reminder", "info")
 EXPIRING_SOON_DAYS = 30
+logger = logging.getLogger("childcair.alerts")
+
+
+def normalize_to_utc_datetime(value: Any, *, document_id: str = "", field_name: str = "date") -> datetime | None:
+    if value is None:
+        return None
+
+    normalized: datetime | None = None
+
+    if isinstance(value, datetime):
+        normalized = value
+    elif isinstance(value, date):
+        normalized = datetime.combine(value, time.min)
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+
+        try:
+            normalized = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                normalized = datetime.combine(date.fromisoformat(stripped), time.min)
+            except ValueError:
+                logger.warning(
+                    "Unable to parse document %s for alert computation: document_id=%s value_type=%s",
+                    field_name,
+                    document_id or "unknown",
+                    type(value).__name__,
+                )
+                return None
+    else:
+        logger.warning(
+            "Unsupported document %s for alert computation: document_id=%s value_type=%s",
+            field_name,
+            document_id or "unknown",
+            type(value).__name__,
+        )
+        return None
+
+    if normalized.tzinfo is None:
+        return normalized.replace(tzinfo=timezone.utc)
+
+    return normalized.astimezone(timezone.utc)
 
 
 def _date_label(value: datetime) -> str:
-    return value.astimezone(UTC).date().isoformat()
+    return value.astimezone(timezone.utc).date().isoformat()
 
 
 def _document_name(document: dict[str, Any]) -> str:
@@ -58,7 +103,7 @@ async def compute_student_alerts(db: AsyncIOMotorDatabase, site_id: str, student
         )
 
     # TODO: Add a computed no-public-photos alert if that custom profile field is introduced.
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     soon = now + timedelta(days=EXPIRING_SOON_DAYS)
     documents = [
         document
@@ -69,7 +114,8 @@ async def compute_student_alerts(db: AsyncIOMotorDatabase, site_id: str, student
         document_id = str(document["_id"])
         name = _document_name(document)
         status = document.get("status", "missing")
-        expires_at = document.get("expiresAt")
+        expires_at = normalize_to_utc_datetime(document.get("expiresAt"), document_id=document_id, field_name="expiresAt")
+        normalize_to_utc_datetime(document.get("receivedAt"), document_id=document_id, field_name="receivedAt")
 
         if status == "missing":
             alerts.append(
