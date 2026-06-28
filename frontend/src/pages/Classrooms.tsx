@@ -10,6 +10,8 @@ import {
   logActivity,
   logMeal,
   startNap,
+  type AlertSeverity,
+  type AlertsSummary,
   type AttendanceStatus,
   type Classroom,
   type ClassroomAttendance
@@ -262,6 +264,7 @@ export function ClassroomsPage({ onOpenStudent }: { onOpenStudent?: (studentId: 
                   <button className="inline-link" type="button" onClick={() => onOpenStudent?.(student.id)}>
                     {studentName(student)}
                   </button>
+                  <AlertSummaryChips summary={student.alertsSummary} />
                   <small>{statusText(student.attendance.status, student.attendance.timestamp, siteTimezone)}</small>
                 </span>
               </label>
@@ -338,6 +341,34 @@ function AttendanceSummary({ counts }: { counts: Classroom["attendance"] }) {
       <span>Not checked in: {counts.not_checked_in}</span>
       <span>Checked out: {counts.checked_out}</span>
     </div>
+  );
+}
+
+const severityLabels: Record<AlertSeverity, string> = {
+  critical: "Critical",
+  important: "Important",
+  warning: "Warning",
+  reminder: "Reminder",
+  info: "Info"
+};
+
+const severityOrder: AlertSeverity[] = ["critical", "important", "warning", "reminder", "info"];
+
+function AlertSummaryChips({ summary }: { summary?: AlertsSummary }) {
+  if (!summary || summary.count === 0) {
+    return null;
+  }
+
+  return (
+    <span className="alert-summary" aria-label={`${summary.count} alerts`}>
+      {severityOrder
+        .filter((severity) => (summary.bySeverity?.[severity] ?? 0) > 0)
+        .map((severity) => (
+          <span className={`alert-chip alert-chip--${severity}`} key={severity}>
+            {severityLabels[severity]} {summary.bySeverity?.[severity]}
+          </span>
+        ))}
+    </span>
   );
 }
 

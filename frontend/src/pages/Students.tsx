@@ -2,21 +2,40 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { IncidentsPage } from "./Incidents";
 import { useAuth } from "../context/AuthContext";
 import {
+  createManualStudentAlert,
   createStudent,
+  createStudentDocument,
+  deleteStudentDocument,
   getStudent,
+  listCustomListItems,
+  listManualStudentAlerts,
+  listStudentAlerts,
+  listStudentDocuments,
   listStudentEvents,
   listStudentIncidents,
   listStudents,
+  updateManualStudentAlert,
   updateStudent,
+  updateStudentDocument,
+  type AlertSeverity,
+  type AlertsSummary,
   type ChildcAirEvent,
+  type CustomListItem,
   type Guardian,
   type Incident,
+  type ManualStudentAlert,
+  type ManualStudentAlertPayload,
   type Student,
+  type StudentAlert,
+  type StudentDocument,
+  type StudentDocumentPayload,
+  type StudentDocumentStatus,
   type StudentPayload
 } from "../services/api";
 
 type ViewMode = "list" | "new" | "detail" | "edit" | "incident-new";
-type ProfileTab = "profile" | "timeline" | "incidents";
+type ProfileTab = "profile" | "timeline" | "incidents" | "documents" | "alerts";
+type DocumentMode = "idle" | "new" | "edit";
 
 type StudentFormState = {
   firstName: string;
@@ -31,6 +50,22 @@ type StudentFormState = {
   guardianRelationship: string;
   guardianPhone: string;
   guardianEmail: string;
+};
+
+type DocumentFormState = {
+  id: string;
+  documentType: string;
+  status: StudentDocumentStatus;
+  title: string;
+  receivedAt: string;
+  expiresAt: string;
+  notes: string;
+};
+
+type ManualAlertFormState = {
+  severity: AlertSeverity;
+  label: string;
+  message: string;
 };
 
 const emptyForm: StudentFormState = {
@@ -48,6 +83,22 @@ const emptyForm: StudentFormState = {
   guardianEmail: ""
 };
 
+const emptyDocumentForm: DocumentFormState = {
+  id: "",
+  documentType: "",
+  status: "missing",
+  title: "",
+  receivedAt: "",
+  expiresAt: "",
+  notes: ""
+};
+
+const emptyManualAlertForm: ManualAlertFormState = {
+  severity: "important",
+  label: "",
+  message: ""
+};
+
 const statusLabels: Record<Student["status"], string> = {
   active: "Active",
   inactive: "Inactive",
@@ -56,12 +107,33 @@ const statusLabels: Record<Student["status"], string> = {
   graduated: "Graduated"
 };
 
+const documentStatusLabels: Record<StudentDocumentStatus, string> = {
+  missing: "Missing",
+  received: "Received",
+  expired: "Expired",
+  not_required: "Not Required"
+};
+
+const severityLabels: Record<AlertSeverity, string> = {
+  critical: "Critical",
+  important: "Important",
+  warning: "Warning",
+  reminder: "Reminder",
+  info: "Info"
+};
+
+const severityOrder: AlertSeverity[] = ["critical", "important", "warning", "reminder", "info"];
+
 export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: string }) {
   const { appContext, currentUser } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<CustomListItem[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<ChildcAirEvent[]>([]);
   const [selectedIncidents, setSelectedIncidents] = useState<Incident[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<StudentDocument[]>([]);
+  const [selectedAlerts, setSelectedAlerts] = useState<StudentAlert[]>([]);
+  const [selectedManualAlerts, setSelectedManualAlerts] = useState<ManualStudentAlert[]>([]);
   const [mode, setMode] = useState<ViewMode>("list");
   const [profileTab, setProfileTab] = useState<ProfileTab>("profile");
   const [form, setForm] = useState<StudentFormState>(emptyForm);
@@ -105,7 +177,9 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
 
     try {
       const token = await getToken();
-      setStudents(await listStudents(token));
+      const [studentList, documentTypeList] = await Promise.all([listStudents(token), listCustomListItems(token, "document_type")]);
+      setStudents(studentList);
+      setDocumentTypes(documentTypeList);
     } catch (loadError) {
       setError(loadError instanceof Error ? `${loadError.message} Please try again.` : "Unable to load students. Please try again.");
     } finally {
@@ -119,11 +193,20 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
 
     try {
       const token = await getToken();
-      const student = await getStudent(token, studentId);
-      const [events, incidents] = await Promise.all([listStudentEvents(token, studentId), listStudentIncidents(token, studentId)]);
+      const [student, events, incidents, documents, alerts, manualAlerts] = await Promise.all([
+        getStudent(token, studentId),
+        listStudentEvents(token, studentId),
+        listStudentIncidents(token, studentId),
+        listStudentDocuments(token, studentId),
+        listStudentAlerts(token, studentId),
+        listManualStudentAlerts(token, studentId)
+      ]);
       setSelectedStudent(student);
       setSelectedEvents(events);
       setSelectedIncidents(incidents);
+      setSelectedDocuments(documents);
+      setSelectedAlerts(alerts);
+      setSelectedManualAlerts(manualAlerts);
       setProfileTab("profile");
       setMode("detail");
     } catch (loadError) {
@@ -136,7 +219,11 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
   function startNewStudent() {
     setForm(emptyForm);
     setSelectedStudent(null);
+    setSelectedEvents([]);
     setSelectedIncidents([]);
+    setSelectedDocuments([]);
+    setSelectedAlerts([]);
+    setSelectedManualAlerts([]);
     setMode("new");
     setError("");
   }
@@ -180,12 +267,13 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
 
       setSelectedStudent(savedStudent);
       if (mode === "edit") {
-        const [events, incidents] = await Promise.all([listStudentEvents(token, savedStudent.id), listStudentIncidents(token, savedStudent.id)]);
-        setSelectedEvents(events);
-        setSelectedIncidents(incidents);
+        await refreshSelectedStudentActivity(savedStudent.id, token);
       } else {
         setSelectedEvents([]);
         setSelectedIncidents([]);
+        setSelectedDocuments([]);
+        setSelectedAlerts([]);
+        setSelectedManualAlerts([]);
       }
       setMode("detail");
       setStudents(await listStudents(token));
@@ -200,11 +288,24 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  async function refreshSelectedStudentActivity(studentId: string) {
-    const token = await getToken();
-    const [events, incidents] = await Promise.all([listStudentEvents(token, studentId), listStudentIncidents(token, studentId)]);
+  async function refreshSelectedStudentActivity(studentId: string, existingToken?: string) {
+    const token = existingToken ?? (await getToken());
+    const [student, events, incidents, documents, alerts, manualAlerts, studentList] = await Promise.all([
+      getStudent(token, studentId),
+      listStudentEvents(token, studentId),
+      listStudentIncidents(token, studentId),
+      listStudentDocuments(token, studentId),
+      listStudentAlerts(token, studentId),
+      listManualStudentAlerts(token, studentId),
+      listStudents(token)
+    ]);
+    setSelectedStudent(student);
     setSelectedEvents(events);
     setSelectedIncidents(incidents);
+    setSelectedDocuments(documents);
+    setSelectedAlerts(alerts);
+    setSelectedManualAlerts(manualAlerts);
+    setStudents(studentList);
   }
 
   async function finishIncidentForSelectedStudent() {
@@ -216,6 +317,61 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
     await refreshSelectedStudentActivity(selectedStudent.id);
     setProfileTab("incidents");
     setMode("detail");
+  }
+
+  async function handleCreateDocument(payload: StudentDocumentPayload) {
+    if (!selectedStudent) {
+      return;
+    }
+
+    const token = await getToken();
+    await createStudentDocument(token, selectedStudent.id, payload);
+    await refreshSelectedStudentActivity(selectedStudent.id, token);
+    setProfileTab("documents");
+  }
+
+  async function handleUpdateDocument(documentId: string, payload: StudentDocumentPayload) {
+    if (!selectedStudent) {
+      return;
+    }
+
+    const token = await getToken();
+    await updateStudentDocument(token, documentId, payload);
+    await refreshSelectedStudentActivity(selectedStudent.id, token);
+    setProfileTab("documents");
+  }
+
+  async function handleDeleteDocument(documentId: string) {
+    if (!selectedStudent) {
+      return;
+    }
+
+    const token = await getToken();
+    await deleteStudentDocument(token, documentId);
+    await refreshSelectedStudentActivity(selectedStudent.id, token);
+    setProfileTab("documents");
+  }
+
+  async function handleCreateManualAlert(payload: ManualStudentAlertPayload) {
+    if (!selectedStudent) {
+      return;
+    }
+
+    const token = await getToken();
+    await createManualStudentAlert(token, selectedStudent.id, payload);
+    await refreshSelectedStudentActivity(selectedStudent.id, token);
+    setProfileTab("alerts");
+  }
+
+  async function handleDeactivateManualAlert(alertId: string) {
+    if (!selectedStudent) {
+      return;
+    }
+
+    const token = await getToken();
+    await updateManualStudentAlert(token, alertId, { active: false });
+    await refreshSelectedStudentActivity(selectedStudent.id, token);
+    setProfileTab("alerts");
   }
 
   if (mode === "new" || mode === "edit") {
@@ -247,12 +403,21 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
   if (mode === "detail" && selectedStudent) {
     return (
       <StudentProfile
+        alerts={selectedAlerts}
         classroomName={classroomNames[selectedStudent.defaultClassroomId] ?? ""}
+        documents={selectedDocuments}
+        documentTypes={documentTypes}
         events={selectedEvents}
         incidents={selectedIncidents}
+        manualAlerts={selectedManualAlerts}
         onBack={() => setMode("list")}
+        onCreateDocument={handleCreateDocument}
+        onCreateManualAlert={handleCreateManualAlert}
+        onDeactivateManualAlert={handleDeactivateManualAlert}
+        onDeleteDocument={handleDeleteDocument}
         onEdit={startEditStudent}
         onNewIncident={() => setMode("incident-new")}
+        onUpdateDocument={handleUpdateDocument}
         initialTab={profileTab}
         siteTimezone={siteTimezone}
         student={selectedStudent}
@@ -293,6 +458,7 @@ export function StudentsPage({ initialStudentId = "" }: { initialStudentId?: str
             <span>
               <strong>{studentName(student)}</strong>
               <small>{classroomNames[student.defaultClassroomId] || "No classroom assigned"}</small>
+              <AlertSummaryChips summary={student.alertsSummary} />
             </span>
             <span className="status-pill">{statusLabels[student.status]}</span>
           </button>
@@ -414,22 +580,40 @@ function StudentForm({
 }
 
 function StudentProfile({
+  alerts,
   classroomName,
+  documents,
+  documentTypes,
   events,
   incidents,
+  manualAlerts,
   onBack,
+  onCreateDocument,
+  onCreateManualAlert,
+  onDeactivateManualAlert,
+  onDeleteDocument,
   onEdit,
   onNewIncident,
+  onUpdateDocument,
   initialTab,
   siteTimezone,
   student
 }: {
+  alerts: StudentAlert[];
   classroomName: string;
+  documents: StudentDocument[];
+  documentTypes: CustomListItem[];
   events: ChildcAirEvent[];
   incidents: Incident[];
+  manualAlerts: ManualStudentAlert[];
   onBack: () => void;
+  onCreateDocument: (payload: StudentDocumentPayload) => Promise<void>;
+  onCreateManualAlert: (payload: ManualStudentAlertPayload) => Promise<void>;
+  onDeactivateManualAlert: (alertId: string) => Promise<void>;
+  onDeleteDocument: (documentId: string) => Promise<void>;
   onEdit: () => void;
   onNewIncident: () => void;
+  onUpdateDocument: (documentId: string, payload: StudentDocumentPayload) => Promise<void>;
   initialTab: ProfileTab;
   siteTimezone: string;
   student: Student;
@@ -437,6 +621,109 @@ function StudentProfile({
   const guardian = student.guardians[0];
   const groupedEvents = groupEventsByDay(events, siteTimezone);
   const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
+  const [documentMode, setDocumentMode] = useState<DocumentMode>("idle");
+  const [documentForm, setDocumentForm] = useState<DocumentFormState>(emptyDocumentForm);
+  const [manualAlertForm, setManualAlertForm] = useState<ManualAlertFormState>(emptyManualAlertForm);
+  const [profileError, setProfileError] = useState("");
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  function beginNewDocument() {
+    setProfileError("");
+    setProfileMessage("");
+    setDocumentForm({ ...emptyDocumentForm, documentType: documentTypes[0]?.value ?? "" });
+    setDocumentMode("new");
+  }
+
+  function beginEditDocument(document: StudentDocument) {
+    setProfileError("");
+    setProfileMessage("");
+    setDocumentForm({
+      id: document.id,
+      documentType: document.documentType,
+      status: document.status,
+      title: document.title,
+      receivedAt: dateInputValue(document.receivedAt),
+      expiresAt: dateInputValue(document.expiresAt),
+      notes: document.notes
+    });
+    setDocumentMode("edit");
+  }
+
+  async function submitDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfileSaving(true);
+    setProfileError("");
+    setProfileMessage("");
+
+    try {
+      const payload = toDocumentPayload(documentForm);
+      if (documentMode === "edit" && documentForm.id) {
+        await onUpdateDocument(documentForm.id, payload);
+        setProfileMessage("Document updated.");
+      } else {
+        await onCreateDocument(payload);
+        setProfileMessage("Document added.");
+      }
+      setDocumentMode("idle");
+      setDocumentForm(emptyDocumentForm);
+    } catch (saveError) {
+      setProfileError(saveError instanceof Error ? saveError.message : "Unable to save document.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function removeDocument(documentId: string) {
+    setProfileSaving(true);
+    setProfileError("");
+    setProfileMessage("");
+
+    try {
+      await onDeleteDocument(documentId);
+      setProfileMessage("Document removed.");
+    } catch (deleteError) {
+      setProfileError(deleteError instanceof Error ? deleteError.message : "Unable to remove document.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function submitManualAlert(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfileSaving(true);
+    setProfileError("");
+    setProfileMessage("");
+
+    try {
+      await onCreateManualAlert(manualAlertForm);
+      setManualAlertForm(emptyManualAlertForm);
+      setProfileMessage("Manual alert added.");
+    } catch (saveError) {
+      setProfileError(saveError instanceof Error ? saveError.message : "Unable to save alert.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function deactivateManualAlert(alertId: string) {
+    setProfileSaving(true);
+    setProfileError("");
+    setProfileMessage("");
+
+    try {
+      await onDeactivateManualAlert(alertId);
+      setProfileMessage("Manual alert deactivated.");
+    } catch (saveError) {
+      setProfileError(saveError instanceof Error ? saveError.message : "Unable to update alert.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
 
   return (
     <section className="page">
@@ -447,126 +734,304 @@ function StudentProfile({
         <div>
           <p className="eyebrow">Student profile</p>
           <h1>{studentName(student)}</h1>
+          <AlertSummaryChips summary={student.alertsSummary} />
         </div>
         <button className="primary-button page-action" type="button" onClick={onEdit}>
           Edit
         </button>
       </div>
       <div className="profile-tabs" role="tablist" aria-label="Student profile sections">
-        <button
-          className={`profile-tab${activeTab === "profile" ? " profile-tab--active" : ""}`}
-          type="button"
-          onClick={() => setActiveTab("profile")}
-        >
-          Profile
-        </button>
-        <button
-          className={`profile-tab${activeTab === "timeline" ? " profile-tab--active" : ""}`}
-          type="button"
-          onClick={() => setActiveTab("timeline")}
-        >
-          Timeline
-        </button>
-        <button
-          className={`profile-tab${activeTab === "incidents" ? " profile-tab--active" : ""}`}
-          type="button"
-          onClick={() => setActiveTab("incidents")}
-        >
-          Incidents
-        </button>
+        {(["profile", "timeline", "incidents", "documents", "alerts"] as ProfileTab[]).map((tab) => (
+          <button
+            className={`profile-tab${activeTab === tab ? " profile-tab--active" : ""}`}
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+          >
+            {tabLabel(tab)}
+          </button>
+        ))}
       </div>
+      {profileError ? <p className="form-error">{profileError}</p> : null}
+      {profileMessage ? <p className="form-success">{profileMessage}</p> : null}
       {activeTab === "profile" ? (
-      <section className="profile-section">
-        <dl className="user-details">
-          <div>
-            <dt>Birthdate</dt>
-            <dd>{student.birthdate || "Not provided"}</dd>
-          </div>
-          <div>
-            <dt>Default classroom</dt>
-            <dd>{classroomName || "No classroom assigned"}</dd>
-          </div>
-          <div>
-            <dt>Status</dt>
-            <dd>{statusLabels[student.status]}</dd>
-          </div>
-          <div>
-            <dt>Allergies</dt>
-            <dd>{student.allergies.length ? student.allergies.join(", ") : "None listed"}</dd>
-          </div>
-          <div>
-            <dt>Medical notes</dt>
-            <dd>{student.medicalNotes || "None listed"}</dd>
-          </div>
-          <div>
-            <dt>Guardian</dt>
-            <dd>
-              {guardian ? (
-                <>
-                  {guardian.name || "Unnamed guardian"}
-                  <br />
-                  {guardian.relationship || "Relationship not provided"}
-                  <br />
-                  {guardian.phone || "No phone"} / {guardian.email || "No email"}
-                </>
-              ) : (
-                "No guardian listed"
-              )}
-            </dd>
-          </div>
-        </dl>
-      </section>
+        <section className="profile-section">
+          <dl className="user-details">
+            <div>
+              <dt>Birthdate</dt>
+              <dd>{student.birthdate || "Not provided"}</dd>
+            </div>
+            <div>
+              <dt>Default classroom</dt>
+              <dd>{classroomName || "No classroom assigned"}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{statusLabels[student.status]}</dd>
+            </div>
+            <div>
+              <dt>Allergies</dt>
+              <dd>{student.allergies.length ? student.allergies.join(", ") : "None listed"}</dd>
+            </div>
+            <div>
+              <dt>Medical notes</dt>
+              <dd>{student.medicalNotes || "None listed"}</dd>
+            </div>
+            <div>
+              <dt>Guardian</dt>
+              <dd>
+                {guardian ? (
+                  <>
+                    {guardian.name || "Unnamed guardian"}
+                    <br />
+                    {guardian.relationship || "Relationship not provided"}
+                    <br />
+                    {guardian.phone || "No phone"} / {guardian.email || "No email"}
+                  </>
+                ) : (
+                  "No guardian listed"
+                )}
+              </dd>
+            </div>
+          </dl>
+        </section>
       ) : null}
       {activeTab === "timeline" ? (
-      <section className="timeline-section" aria-labelledby="timeline-heading">
-        <h2 id="timeline-heading">Timeline</h2>
-        {events.length === 0 ? <p className="page-copy">No activity yet.</p> : null}
-        {groupedEvents.map((group) => (
-          <div className="timeline-day" key={group.label}>
-            <h3>{group.label}</h3>
-            <div className="timeline-list">
-              {group.events.map((event) => (
-                <article className="timeline-item" key={event.id}>
-                  <time>{formatEventTime(event.timestamp, siteTimezone)}</time>
-                  <div>
-                    <strong>{eventTypeLabel(event.eventType)}</strong>
-                    {event.notes ? <p>{event.notes}</p> : null}
-                  </div>
-                </article>
-              ))}
+        <section className="timeline-section" aria-labelledby="timeline-heading">
+          <h2 id="timeline-heading">Timeline</h2>
+          {events.length === 0 ? <p className="page-copy">No activity yet.</p> : null}
+          {groupedEvents.map((group) => (
+            <div className="timeline-day" key={group.label}>
+              <h3>{group.label}</h3>
+              <div className="timeline-list">
+                {group.events.map((event) => (
+                  <article className="timeline-item" key={event.id}>
+                    <time>{formatEventTime(event.timestamp, siteTimezone)}</time>
+                    <div>
+                      <strong>{eventTypeLabel(event.eventType)}</strong>
+                      {event.notes ? <p>{event.notes}</p> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
       ) : null}
       {activeTab === "incidents" ? (
-      <section className="timeline-section" aria-labelledby="incidents-heading">
-        <div className="section-header">
-          <h2 id="incidents-heading">Incidents</h2>
-          <button className="primary-button section-action" type="button" onClick={onNewIncident}>
-            + New Incident
-          </button>
-        </div>
-        {incidents.length === 0 ? <p className="page-copy">No incidents reported.</p> : null}
-        <div className="incident-list">
-          {incidents.map((incident) => (
-            <article className="incident-card" key={incident.id}>
-              <span>
-                <strong>{incident.incidentTypeLabel}</strong>
-                <small>
-                  {incident.severity} / {incident.locationLabel === "Other" && incident.otherLocation ? incident.otherLocation : incident.locationLabel}
-                </small>
-                <small>{formatEventDateTime(incident.occurredAt, siteTimezone)}</small>
-              </span>
-              <span className="incident-meta">
-                <span className="status-pill">{incident.status}</span>
-              </span>
-            </article>
-          ))}
-        </div>
-      </section>
+        <section className="timeline-section" aria-labelledby="incidents-heading">
+          <div className="section-header">
+            <h2 id="incidents-heading">Incidents</h2>
+            <button className="primary-button section-action" type="button" onClick={onNewIncident}>
+              + New Incident
+            </button>
+          </div>
+          {incidents.length === 0 ? <p className="page-copy">No incidents reported.</p> : null}
+          <div className="incident-list">
+            {incidents.map((incident) => (
+              <article className="incident-card" key={incident.id}>
+                <span>
+                  <strong>{incident.incidentTypeLabel}</strong>
+                  <small>
+                    {incident.severity} /{" "}
+                    {incident.locationLabel === "Other" && incident.otherLocation ? incident.otherLocation : incident.locationLabel}
+                  </small>
+                  <small>{formatEventDateTime(incident.occurredAt, siteTimezone)}</small>
+                </span>
+                <span className="incident-meta">
+                  <span className="status-pill">{incident.status}</span>
+                </span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {activeTab === "documents" ? (
+        <section className="timeline-section" aria-labelledby="documents-heading">
+          <div className="section-header">
+            <h2 id="documents-heading">Documents</h2>
+            <button className="primary-button section-action" type="button" onClick={beginNewDocument}>
+              + Add Document
+            </button>
+          </div>
+          {documentMode !== "idle" ? (
+            <DocumentForm
+              documentTypes={documentTypes}
+              form={documentForm}
+              mode={documentMode}
+              onCancel={() => setDocumentMode("idle")}
+              onChange={(field, value) => setDocumentForm((current) => ({ ...current, [field]: value }))}
+              onSubmit={submitDocument}
+              saving={profileSaving}
+            />
+          ) : null}
+          {documents.length === 0 ? <p className="page-copy">No documents recorded.</p> : null}
+          <div className="incident-list">
+            {documents.map((document) => (
+              <article className="incident-card" key={document.id}>
+                <span>
+                  <strong>{document.documentTypeLabel}</strong>
+                  <small>{documentStatusLabels[document.status]}</small>
+                  <small>Received: {formatDateOnly(document.receivedAt) || "Not recorded"}</small>
+                  <small>Expires: {formatDateOnly(document.expiresAt) || "Not recorded"}</small>
+                  {document.notes ? <small>{document.notes}</small> : null}
+                </span>
+                <span className="incident-meta">
+                  <button className="text-button" type="button" onClick={() => beginEditDocument(document)}>
+                    Edit
+                  </button>
+                  <button className="text-button" disabled={profileSaving} type="button" onClick={() => void removeDocument(document.id)}>
+                    Delete
+                  </button>
+                </span>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {activeTab === "alerts" ? (
+        <section className="timeline-section" aria-labelledby="alerts-heading">
+          <h2 id="alerts-heading">Alerts</h2>
+          {alerts.length === 0 ? <p className="page-copy">No alerts.</p> : null}
+          <div className="incident-list">
+            {alerts.map((alert, index) => (
+              <article className={`incident-card alert-card alert-card--${alert.severity}`} key={`${alert.source}-${alert.type}-${alert.id ?? index}`}>
+                <span>
+                  <strong>{alert.label}</strong>
+                  <small>{severityLabels[alert.severity]}</small>
+                  {alert.message ? <small>{alert.message}</small> : null}
+                </span>
+              </article>
+            ))}
+          </div>
+          <h3 className="form-section-title">Manual Alert</h3>
+          <form className="student-form compact-form" onSubmit={submitManualAlert}>
+            <label className="field">
+              <span>Severity</span>
+              <select
+                value={manualAlertForm.severity}
+                onChange={(event) => setManualAlertForm((current) => ({ ...current, severity: event.target.value as AlertSeverity }))}
+              >
+                {severityOrder.map((severity) => (
+                  <option key={severity} value={severity}>
+                    {severityLabels[severity]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Label</span>
+              <input
+                required
+                value={manualAlertForm.label}
+                onChange={(event) => setManualAlertForm((current) => ({ ...current, label: event.target.value }))}
+              />
+            </label>
+            <label className="field field--wide">
+              <span>Message</span>
+              <textarea
+                value={manualAlertForm.message}
+                onChange={(event) => setManualAlertForm((current) => ({ ...current, message: event.target.value }))}
+              />
+            </label>
+            <div className="form-actions field--wide">
+              <button className="primary-button" disabled={profileSaving} type="submit">
+                {profileSaving ? "Saving..." : "Add Manual Alert"}
+              </button>
+            </div>
+          </form>
+          {manualAlerts.filter((alert) => alert.active).length === 0 ? null : (
+            <>
+              <h3 className="form-section-title">Active Manual Alerts</h3>
+              <div className="incident-list">
+                {manualAlerts
+                  .filter((alert) => alert.active)
+                  .map((alert) => (
+                    <article className={`incident-card alert-card alert-card--${alert.severity}`} key={alert.id}>
+                      <span>
+                        <strong>{alert.label}</strong>
+                        <small>{severityLabels[alert.severity]}</small>
+                        {alert.message ? <small>{alert.message}</small> : null}
+                      </span>
+                      <button className="text-button" disabled={profileSaving} type="button" onClick={() => void deactivateManualAlert(alert.id)}>
+                        Deactivate
+                      </button>
+                    </article>
+                  ))}
+              </div>
+            </>
+          )}
+        </section>
       ) : null}
     </section>
+  );
+}
+
+function DocumentForm({
+  documentTypes,
+  form,
+  mode,
+  onCancel,
+  onChange,
+  onSubmit,
+  saving
+}: {
+  documentTypes: CustomListItem[];
+  form: DocumentFormState;
+  mode: DocumentMode;
+  onCancel: () => void;
+  onChange: (field: keyof DocumentFormState, value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  saving: boolean;
+}) {
+  return (
+    <form className="student-form compact-form" onSubmit={onSubmit}>
+      <label className="field">
+        <span>Document type</span>
+        <select required value={form.documentType} onChange={(event) => onChange("documentType", event.target.value)}>
+          <option value="">Choose a document</option>
+          {documentTypes.map((documentType) => (
+            <option key={documentType.id} value={documentType.value}>
+              {documentType.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Status</span>
+        <select value={form.status} onChange={(event) => onChange("status", event.target.value as StudentDocumentStatus)}>
+          {Object.entries(documentStatusLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Title</span>
+        <input value={form.title} onChange={(event) => onChange("title", event.target.value)} />
+      </label>
+      <label className="field">
+        <span>Received</span>
+        <input type="date" value={form.receivedAt} onChange={(event) => onChange("receivedAt", event.target.value)} />
+      </label>
+      <label className="field">
+        <span>Expires</span>
+        <input type="date" value={form.expiresAt} onChange={(event) => onChange("expiresAt", event.target.value)} />
+      </label>
+      <label className="field field--wide">
+        <span>Notes</span>
+        <textarea value={form.notes} onChange={(event) => onChange("notes", event.target.value)} />
+      </label>
+      <div className="form-actions field--wide">
+        <button className="text-button" type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="primary-button" disabled={saving} type="submit">
+          {saving ? "Saving..." : mode === "edit" ? "Save Document" : "Add Document"}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -598,8 +1063,49 @@ function toPayload(form: StudentFormState): StudentPayload {
   };
 }
 
-function studentName(student: Student) {
+function toDocumentPayload(form: DocumentFormState): StudentDocumentPayload {
+  return {
+    documentType: form.documentType,
+    status: form.status,
+    title: form.title.trim(),
+    receivedAt: form.receivedAt || null,
+    expiresAt: form.expiresAt || null,
+    notes: form.notes.trim()
+  };
+}
+
+function studentName(student: { firstName: string; lastName: string; preferredName: string }) {
   return [student.preferredName || student.firstName, student.lastName].filter(Boolean).join(" ");
+}
+
+function tabLabel(tab: ProfileTab) {
+  const labels: Record<ProfileTab, string> = {
+    profile: "Profile",
+    timeline: "Timeline",
+    incidents: "Incidents",
+    documents: "Documents",
+    alerts: "Alerts"
+  };
+
+  return labels[tab];
+}
+
+function AlertSummaryChips({ summary }: { summary?: AlertsSummary }) {
+  if (!summary || summary.count === 0) {
+    return null;
+  }
+
+  return (
+    <span className="alert-summary" aria-label={`${summary.count} alerts`}>
+      {severityOrder
+        .filter((severity) => (summary.bySeverity?.[severity] ?? 0) > 0)
+        .map((severity) => (
+          <span className={`alert-chip alert-chip--${severity}`} key={severity}>
+            {severityLabels[severity]} {summary.bySeverity?.[severity]}
+          </span>
+        ))}
+    </span>
+  );
 }
 
 function eventTypeLabel(eventType: string) {
@@ -696,4 +1202,23 @@ function formatEventDateTime(timestamp: string, siteTimezone: string) {
     timeStyle: "short",
     timeZone: siteTimezone
   }).format(new Date(timestamp));
+}
+
+function formatDateOnly(timestamp: string) {
+  if (!timestamp) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeZone: "UTC"
+  }).format(new Date(timestamp));
+}
+
+function dateInputValue(timestamp: string) {
+  if (!timestamp) {
+    return "";
+  }
+
+  return new Date(timestamp).toISOString().slice(0, 10);
 }

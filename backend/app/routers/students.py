@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.deps import FirebaseUser, get_current_firebase_user
 from app.services.auth_context import resolve_current_user_context
+from app.services.alerts import alerts_summary_for_student, alerts_summary_for_students
 from app.services.database import get_database
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -86,7 +87,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _serialize_student(student: dict[str, Any]) -> dict[str, Any]:
+def _serialize_student(student: dict[str, Any], alerts_summary: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "id": str(student["_id"]),
         "siteId": student["siteId"],
@@ -101,6 +102,7 @@ def _serialize_student(student: dict[str, Any]) -> dict[str, Any]:
         "guardians": student.get("guardians", []),
         "authorizedPickup": student.get("authorizedPickup", []),
         "custom": student.get("custom", {}),
+        "alertsSummary": alerts_summary or {"count": 0, "bySeverity": {}},
         "createdAt": student["createdAt"].isoformat() if student.get("createdAt") else "",
         "updatedAt": student["updatedAt"].isoformat() if student.get("updatedAt") else "",
     }
@@ -171,8 +173,9 @@ async def list_students(
     db: AsyncIOMotorDatabase = Depends(get_database),
 ) -> list[dict[str, Any]]:
     _, site_id = await _current_user_site(db, firebase_user)
-    cursor = db.students.find({"siteId": site_id}).sort([("lastName", 1), ("firstName", 1)])
-    return [_serialize_student(student) async for student in cursor]
+    students = [student async for student in db.students.find({"siteId": site_id}).sort([("lastName", 1), ("firstName", 1)])]
+    summaries = await alerts_summary_for_students(db, site_id, students)
+    return [_serialize_student(student, summaries.get(str(student["_id"]))) for student in students]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -202,7 +205,8 @@ async def create_student(
         metadata={"fields": ["firstName", "lastName", "status", "defaultClassroomId"]},
     )
     student = await db.students.find_one({"_id": result.inserted_id, "siteId": site_id})
-    return _serialize_student(student)
+    summary = await alerts_summary_for_student(db, site_id, student)
+    return _serialize_student(student, summary)
 
 
 @router.get("/{student_id}")
@@ -217,7 +221,8 @@ async def get_student(
     if not student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found.")
 
-    return _serialize_student(student)
+    summary = await alerts_summary_for_student(db, site_id, student)
+    return _serialize_student(student, summary)
 
 
 @router.patch("/{student_id}")
@@ -235,7 +240,8 @@ async def update_student(
         student = await db.students.find_one({"_id": _object_id(student_id), "siteId": site_id})
         if not student:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found.")
-        return _serialize_student(student)
+        summary = await alerts_summary_for_student(db, site_id, student)
+        return _serialize_student(student, summary)
 
     data["updatedAt"] = _now()
     result = await db.students.update_one(
@@ -255,4 +261,5 @@ async def update_student(
         metadata={"fields": sorted(field for field in data if field not in {"medicalNotes", "updatedAt"})},
     )
     student = await db.students.find_one({"_id": _object_id(student_id), "siteId": site_id})
-    return _serialize_student(student)
+    summary = await alerts_summary_for_student(db, site_id, student)
+    return _serialize_student(student, summary)

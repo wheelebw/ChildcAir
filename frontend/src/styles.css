@@ -467,9 +467,83 @@ h1 {
   font-weight: 800;
 }
 
+.alert-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.alert-chip {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #1f2937;
+  background: #eef2f7;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.alert-chip--critical {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.alert-chip--important {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.alert-chip--warning {
+  color: #854d0e;
+  background: #fef3c7;
+}
+
+.alert-chip--reminder {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.alert-chip--info {
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.alert-card {
+  border-left: 4px solid #cbd5e1;
+}
+
+.alert-card--critical {
+  border-left-color: #dc2626;
+}
+
+.alert-card--important {
+  border-left-color: #ea580c;
+}
+
+.alert-card--warning {
+  border-left-color: #d97706;
+}
+
+.alert-card--reminder {
+  border-left-color: #2563eb;
+}
+
+.alert-card--info {
+  border-left-color: #0d9488;
+}
+
 .student-form {
   display: grid;
   gap: 16px;
+}
+
+.compact-form {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .form-section-title {
@@ -503,7 +577,7 @@ h1 {
 
 .profile-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 6px;
   padding: 4px;
   border: 1px solid #dbe3ec;

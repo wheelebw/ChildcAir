@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.deps import FirebaseUser, get_current_firebase_user
 from app.services.auth_context import resolve_current_user_context
+from app.services.alerts import alerts_summary_for_students
 from app.services.database import get_database
 from app.services.events import create_event_record, object_id, serialize_event, utc_iso
 
@@ -45,7 +46,7 @@ def _serialize_classroom(classroom: dict[str, Any], counts: dict[str, int] | Non
     }
 
 
-def _serialize_student(student: dict[str, Any], attendance: dict[str, Any]) -> dict[str, Any]:
+def _serialize_student(student: dict[str, Any], attendance: dict[str, Any], alerts_summary: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "id": str(student["_id"]),
         "firstName": student["firstName"],
@@ -54,6 +55,7 @@ def _serialize_student(student: dict[str, Any], attendance: dict[str, Any]) -> d
         "defaultClassroomId": student.get("defaultClassroomId", ""),
         "status": student.get("status", "active"),
         "attendance": attendance,
+        "alertsSummary": alerts_summary or {"count": 0, "bySeverity": {}},
     }
 
 
@@ -166,10 +168,14 @@ async def get_classroom_attendance(
     students = await _students_for_classroom(db, site_id, classroom_id)
     student_ids = [str(student["_id"]) for student in students]
     attendance = await _attendance_by_student(db, site_id, student_ids, site_timezone)
+    alert_summaries = await alerts_summary_for_students(db, site_id, students)
 
     return {
         "classroom": _serialize_classroom(classroom, _counts(attendance)),
-        "students": [_serialize_student(student, attendance[str(student["_id"])]) for student in students],
+        "students": [
+            _serialize_student(student, attendance[str(student["_id"])], alert_summaries.get(str(student["_id"])))
+            for student in students
+        ],
     }
 
 

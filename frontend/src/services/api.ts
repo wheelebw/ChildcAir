@@ -48,6 +48,7 @@ export type Student = {
   guardians: Guardian[];
   authorizedPickup: Record<string, unknown>[];
   custom: Record<string, unknown>;
+  alertsSummary: AlertsSummary;
   createdAt: string;
   updatedAt: string;
 };
@@ -99,6 +100,13 @@ export type CustomListItem = {
   systemDefault: boolean;
 };
 
+export type AlertSeverity = "critical" | "important" | "warning" | "reminder" | "info";
+
+export type AlertsSummary = {
+  count: number;
+  bySeverity: Partial<Record<AlertSeverity, number>>;
+};
+
 export type AttendanceStatus = "checked_in" | "checked_out" | "not_checked_in";
 
 export type ClassroomAttendanceCounts = {
@@ -128,6 +136,7 @@ export type ClassroomAttendanceStudent = {
     timestamp: string;
     eventId: string;
   };
+  alertsSummary: AlertsSummary;
 };
 
 export type ClassroomAttendance = {
@@ -199,6 +208,63 @@ export type IncidentPayload = {
   status: IncidentStatus;
 };
 
+export type StudentDocumentStatus = "missing" | "received" | "expired" | "not_required";
+
+export type StudentDocument = {
+  id: string;
+  siteId: string;
+  studentId: string;
+  documentType: string;
+  documentTypeLabel: string;
+  status: StudentDocumentStatus;
+  title: string;
+  receivedAt: string;
+  expiresAt: string;
+  notes: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StudentDocumentPayload = {
+  documentType: string;
+  status: StudentDocumentStatus;
+  title: string;
+  receivedAt: string | null;
+  expiresAt: string | null;
+  notes: string;
+};
+
+export type StudentAlert = {
+  id?: string;
+  source: "profile" | "document" | "manual";
+  type: string;
+  severity: AlertSeverity;
+  label: string;
+  message: string;
+  relatedEntity?: { type: string; id: string };
+};
+
+export type ManualStudentAlert = {
+  id: string;
+  siteId: string;
+  studentId: string;
+  severity: AlertSeverity;
+  label: string;
+  message: string;
+  active: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ManualStudentAlertPayload = {
+  severity: AlertSeverity;
+  label: string;
+  message: string;
+  active?: boolean;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -267,6 +333,30 @@ async function apiRequest<T>(path: string, idToken: string, init: RequestInit = 
   }
 
   return response.json() as Promise<T>;
+}
+
+async function apiRequestNoContent(path: string, idToken: string, init: RequestInit = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+      ...init.headers
+    }
+  });
+
+  if (!response.ok) {
+    let message = "Request failed.";
+
+    try {
+      const body = (await response.json()) as { detail?: string };
+      message = body.detail || message;
+    } catch {
+      // Keep the generic message when the backend does not return JSON.
+    }
+
+    throw new ApiError(message, response.status);
+  }
 }
 
 export function listStudents(idToken: string) {
@@ -387,4 +477,50 @@ export function updateIncident(idToken: string, incidentId: string, payload: Inc
 
 export function listStudentIncidents(idToken: string, studentId: string) {
   return apiRequest<Incident[]>(`/students/${studentId}/incidents`, idToken);
+}
+
+export function listStudentDocuments(idToken: string, studentId: string) {
+  return apiRequest<StudentDocument[]>(`/students/${studentId}/documents`, idToken);
+}
+
+export function createStudentDocument(idToken: string, studentId: string, payload: StudentDocumentPayload) {
+  return apiRequest<StudentDocument>(`/students/${studentId}/documents`, idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateStudentDocument(idToken: string, documentId: string, payload: StudentDocumentPayload) {
+  return apiRequest<StudentDocument>(`/documents/${documentId}`, idToken, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteStudentDocument(idToken: string, documentId: string) {
+  return apiRequestNoContent(`/documents/${documentId}`, idToken, {
+    method: "DELETE"
+  });
+}
+
+export function listStudentAlerts(idToken: string, studentId: string) {
+  return apiRequest<StudentAlert[]>(`/students/${studentId}/alerts`, idToken);
+}
+
+export function listManualStudentAlerts(idToken: string, studentId: string) {
+  return apiRequest<ManualStudentAlert[]>(`/students/${studentId}/manual-alerts`, idToken);
+}
+
+export function createManualStudentAlert(idToken: string, studentId: string, payload: ManualStudentAlertPayload) {
+  return apiRequest<ManualStudentAlert>(`/students/${studentId}/manual-alerts`, idToken, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateManualStudentAlert(idToken: string, alertId: string, payload: Partial<ManualStudentAlertPayload>) {
+  return apiRequest<ManualStudentAlert>(`/student-alerts/${alertId}`, idToken, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
 }

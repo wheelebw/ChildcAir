@@ -5,10 +5,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers.alerts import router as alerts_router
 from app.routers.bootstrap import router as bootstrap_router
 from app.routers.classrooms import router as classrooms_router
 from app.routers.custom_lists import router as custom_lists_router
 from app.routers.daily_care import router as daily_care_router
+from app.routers.documents import router as documents_router
 from app.routers.events import router as events_router
 from app.routers.incidents import router as incidents_router
 from app.routers.students import router as students_router
@@ -37,9 +39,11 @@ app.add_middleware(
 )
 
 app.include_router(bootstrap_router)
+app.include_router(alerts_router)
 app.include_router(classrooms_router)
 app.include_router(custom_lists_router)
 app.include_router(daily_care_router)
+app.include_router(documents_router)
 app.include_router(events_router)
 app.include_router(incidents_router)
 app.include_router(students_router)
